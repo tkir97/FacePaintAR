@@ -1,20 +1,27 @@
-# AR Face Painter V1.5.3 — iOS Pinch Fix
+# AR Face Painter V1.6.2 — Extended Forehead Mesh
 
-This fixes pinch-to-zoom on iPhone Safari.
+This is a structural forehead-coverage upgrade.
 
-## What changed
+## Why the previous version still stopped too low
 
-The previous build handled pinch using Pointer Events directly on the transformed paint canvas. Safari can lose or confuse pointer tracking while that element is being transformed.
+Increasing the painter crop does not extend the actual MediaPipe face mesh. MediaPipe's normal tessellation ends around the upper forehead, so artwork above that line had no geometry to render onto.
 
-V1.5.3 instead:
-- listens for native `touchstart` / `touchmove` on the stable outer paint wrapper
-- reserves two-finger touches for zoom + pan
-- leaves single-finger Pointer Events for drawing, stamps and emojis
-- prevents Safari page zoom/callout inside the studio canvas
+## What V1.6.2 changes
 
-## Controls
+V1.6.2 creates **two synthetic rows of forehead vertices** above the normal face mesh and connects them to the existing upper-face landmarks.
 
-- 1 finger: draw / erase / place stamp / place emoji
-- 2 fingers: pinch to zoom + pan
-- Reset zoom: restore 100%
+The live renderer now has an extended forehead cap, allowing paint to project significantly higher than the standard MediaPipe boundary.
 
+The Mask Studio shows the top of the new region with a yellow dashed **EXTENDED FOREHEAD** guide.
+
+## Notes
+
+The synthetic forehead region follows head position, scale and roll based on the real upper-face landmarks. It is extrapolated geometry rather than directly detected scalp landmarks, because MediaPipe does not provide tracking points all the way to the hairline.
+
+After opening this build, rebuild the digital twin once.
+
+## Run
+
+```bash
+python3 -m http.server 8080
+```

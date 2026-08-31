@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AR Face Painter v1.5.3</title>
+<title>AR Face Painter v1.6.2</title>
 <style>
 :root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#f4f4f5;background:#09090b;color-scheme:dark}
 *{box-sizing:border-box}body{margin:0;background:#09090b;min-height:100vh}button,input{font:inherit}
@@ -104,6 +104,14 @@ label{font-size:11px;color:#a1a1aa;display:block;margin-bottom:7px}input[type=ra
       <div class="tool"><label for="emojiSelect">Emoji preset</label><select id="emojiSelect"><option>✨</option><option>⭐</option><option>🔥</option><option>❤️</option><option>🦋</option><option>🌈</option><option>⚡</option><option>❄️</option><option>🎭</option><option>👑</option></select></div>
       <div class="tool"><label for="emojiInput">Custom emoji (optional)</label><input id="emojiInput" type="text" placeholder="e.g. 😎 or 🐯"></div>
       <div class="tool"><label for="stampRotation">Stamp rotation <span id="stampRotationOut">0</span>°</label><input id="stampRotation" type="range" min="0" max="360" value="0"></div>
+      <div class="tool"><label for="animalMaskSelect">Animal mask template</label><select id="animalMaskSelect"><option value="cat">Cat</option><option value="tiger">Tiger</option><option value="panda">Panda</option><option value="fox">Fox</option><option value="rabbit">Rabbit</option></select></div>
+      <div class="tool">
+        <label>Template actions</label>
+        <div class="row">
+          <button id="applyAnimalBtn">Load template</button>
+          <button id="randomAnimalBtn">Random</button>
+        </div>
+      </div>
       <div class="tool">
         <label>Editor overlays</label>
         <div class="row">
@@ -116,7 +124,7 @@ label{font-size:11px;color:#a1a1aa;display:block;margin-bottom:7px}input[type=ra
     <div class="actions" style="margin-top:11px">
       <button id="brushBtn">Brush</button><button id="eraserBtn">Eraser</button><button id="stampBtn">Stamp</button><button id="emojiBtn">Emoji</button><button id="undoBtn">Undo</button><button id="clearBtn">Clear</button><button id="resetZoomBtn">Reset zoom</button><button id="demoBtn" disabled>Feature demo</button>
     </div>
-    <div class="notice">Brush and eraser work as before. In <b>Stamp</b> or <b>Emoji</b> mode, click anywhere on the twin to place a sticker. On touch devices, use <b>pinch to zoom</b> and move two fingers to pan around the mask studio.</div>
+    <div class="notice">V1.6.2 adds a synthetic <b>extended forehead mesh</b> above MediaPipe’s normal face boundary. Paint above the yellow dashed line area to cover much higher on the forehead.</div>
   </div>
 </article>
 
@@ -140,12 +148,17 @@ const pctx=paint.getContext("2d"),gctx=guide.getContext("2d"),tctx=twin.getConte
 const video=$("video"),output=$("output");
 let gl=null, glProgram=null, glPosBuffer=null, glUvBuffer=null, glIndexBuffer=null, glTexture=null;
 let glPosLoc=-1, glUvLoc=-1, glAlphaLoc=null, glIndexCount=0, textureDirty=true;
-const cameraBtn=$("cameraBtn"),recalibrateBtn=$("recalibrateBtn"),demoBtn=$("demoBtn"),resetZoomBtn=$("resetZoomBtn"),zoomBadge=$("zoomBadge"),mobileCameraBtn=$("mobileCameraBtn"),mobileRecalibrateBtn=$("mobileRecalibrateBtn"),studioTab=$("studioTab"),cameraTab=$("cameraTab"),studioView=$("studioView"),cameraView=$("cameraView");
+const cameraBtn=$("cameraBtn"),recalibrateBtn=$("recalibrateBtn"),demoBtn=$("demoBtn"),resetZoomBtn=$("resetZoomBtn"),zoomBadge=$("zoomBadge"),applyAnimalBtn=$("applyAnimalBtn"),randomAnimalBtn=$("randomAnimalBtn"),mobileCameraBtn=$("mobileCameraBtn"),mobileRecalibrateBtn=$("mobileRecalibrateBtn"),studioTab=$("studioTab"),cameraTab=$("cameraTab"),studioView=$("studioView"),cameraView=$("cameraView");
 const status=$("status"),trackingStatus=$("trackingStatus"),stageMsg=$("stageMsg"),calibrationMessage=$("calibrationMessage"),calBadge=$("calBadge"),fpsBadge=$("fpsBadge"),trackDot=$("trackDot"),trackLabel=$("trackLabel");
-const color=$("color"),size=$("size"),opacity=$("opacity"),maskOpacity=$("maskOpacity"),twinOpacity=$("twinOpacity"),stampType=$("stampType"),emojiSelect=$("emojiSelect"),emojiInput=$("emojiInput"),stampRotation=$("stampRotation"),showMesh=$("showMesh"),showFeatures=$("showFeatures");
+const color=$("color"),size=$("size"),opacity=$("opacity"),maskOpacity=$("maskOpacity"),twinOpacity=$("twinOpacity"),stampType=$("stampType"),emojiSelect=$("emojiSelect"),emojiInput=$("emojiInput"),stampRotation=$("stampRotation"),animalMaskSelect=$("animalMaskSelect"),showMesh=$("showMesh"),showFeatures=$("showFeatures");
 
 let faceLandmarker=null,stream=null,raf=0,lastVideoTime=-1,lastFrameAt=performance.now();
 let triangles=[],reference=null,sourcePoints=null,smoothed=null;
+let renderTriangles=[],renderSourcePoints=[];
+const FOREHEAD_BASE=[21,54,103,67,109,10,338,297,332,284,251];
+const FOREHEAD_ROWS=2;
+const FOREHEAD_ROW1=0.18;
+const FOREHEAD_ROW2=0.38;
 let calibrating=false,calCount=0,bestScore=Infinity,bestLandmarks=null,bestFrame=null;
 const isMobile=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || matchMedia("(max-width:900px)").matches;
 const detectIntervalMs=isMobile?66:33;
@@ -279,6 +292,13 @@ $("stampBtn").onclick=()=>{mode="stamp";status.textContent="Stamp mode selected.
 $("emojiBtn").onclick=()=>{mode="emoji";status.textContent="Emoji mode selected. Click the twin to place an emoji."};
 $("undoBtn").onclick=()=>{const x=history.pop();if(x){pctx.putImageData(x,0,0);textureDirty=true}};
 $("clearBtn").onclick=()=>{snapshot();pctx.clearRect(0,0,paint.width,paint.height);textureDirty=true};
+applyAnimalBtn.onclick=()=>applyAnimalMask(animalMaskSelect.value);
+randomAnimalBtn.onclick=()=>{
+  const options=["cat","tiger","panda","fox","rabbit"];
+  const pick=options[Math.floor(Math.random()*options.length)];
+  animalMaskSelect.value=pick;
+  applyAnimalMask(pick);
+};
 resetZoomBtn.onclick=resetStudioZoom;
 demoBtn.onclick=drawDemo;
 
@@ -437,17 +457,17 @@ function initGL(){
 }
 function rebuildGLTopology(){
   initGL();
-  const indices=new Uint16Array(triangles.flat());
+  const indices=new Uint16Array(renderTriangles.flat());
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,glIndexBuffer);
   gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,indices,gl.STATIC_DRAW);
   glIndexCount=indices.length;
 }
 function rebuildGLUV(){
-  if(!gl||!sourcePoints)return;
-  const uv=new Float32Array(468*2);
-  for(let i=0;i<468;i++){
-    uv[i*2]=sourcePoints[i].x/paint.width;
-    uv[i*2+1]=sourcePoints[i].y/paint.height;
+  if(!gl||!renderSourcePoints.length)return;
+  const uv=new Float32Array(renderSourcePoints.length*2);
+  for(let i=0;i<renderSourcePoints.length;i++){
+    uv[i*2]=renderSourcePoints[i].x/paint.width;
+    uv[i*2+1]=renderSourcePoints[i].y/paint.height;
   }
   gl.bindBuffer(gl.ARRAY_BUFFER,glUvBuffer);
   gl.bufferData(gl.ARRAY_BUFFER,uv,gl.STATIC_DRAW);
@@ -511,7 +531,7 @@ function calibrationStep(lms){
   calCount++;const score=frontalScore(lms);
   if(score<bestScore){bestScore=score;bestLandmarks=lms.slice(0,468).map(p=>({x:p.x,y:p.y,z:p.z||0}));bestFrame=copyFrame()}
   trackLabel.textContent=`calibrating ${Math.min(calCount,24)}/24`;
-  if(calCount>=24&&bestLandmarks&&bestFrame){reference=bestLandmarks;makeSourcePoints();rebuildGLUV();buildTwin();drawGuide();calibrating=false;calBadge.textContent="digital twin ready";calibrationMessage.classList.add("hidden");demoBtn.disabled=false;status.textContent="Digital twin ready. Paint, stamp or place emojis directly over your real facial features.";if(innerWidth<=900)setMobileView("studio")}
+  if(calCount>=24&&bestLandmarks&&bestFrame){reference=bestLandmarks;makeSourcePoints();buildExtendedSourcePoints();rebuildGLUV();buildTwin();drawGuide();calibrating=false;calBadge.textContent="digital twin ready";calibrationMessage.classList.add("hidden");demoBtn.disabled=false;status.textContent="Digital twin ready. Paint, stamp, place emojis, or load a pre-drawn animal mask template.";if(innerWidth<=900)setMobileView("studio")}
 }
 function makeSourcePoints(){
   // IMPORTANT: MediaPipe x/y are normalized independently by video width/height.
@@ -533,7 +553,12 @@ function makeSourcePoints(){
 
   const bw=maxX-minX, bh=maxY-minY;
   minX-=bw*.12; maxX+=bw*.12;
-  minY-=bh*.09; maxY+=bh*.10;
+
+  // V1.6.1: extend the design atlas well above landmark 10 so masks can
+  // cover the upper forehead instead of stopping close to the brow line.
+  // Keep bottom expansion modest so eye/nose/mouth alignment is preserved.
+  minY-=bh*.52;
+  maxY+=bh*.10;
 
   const boxW=maxX-minX, boxH=maxY-minY;
   const pad=38;
@@ -547,6 +572,82 @@ function makeSourcePoints(){
     x:ox+(p.x-minX)*scale,
     y:oy+(p.y-minY)*scale
   }));
+}
+
+function buildExtendedTopology(){
+  renderTriangles=triangles.map(t=>t.slice());
+  const baseStart=468;
+  const rowLen=FOREHEAD_BASE.length;
+
+  // Two synthetic rows above the normal MediaPipe forehead boundary.
+  for(let row=0;row<FOREHEAD_ROWS;row++){
+    const lower=row===0 ? FOREHEAD_BASE.map(id=>id) : FOREHEAD_BASE.map((_,i)=>baseStart+(row-1)*rowLen+i);
+    const upper=FOREHEAD_BASE.map((_,i)=>baseStart+row*rowLen+i);
+    for(let i=0;i<rowLen-1;i++){
+      renderTriangles.push([lower[i],lower[i+1],upper[i]]);
+      renderTriangles.push([lower[i+1],upper[i+1],upper[i]]);
+    }
+  }
+}
+function buildExtendedSourcePoints(){
+  if(!sourcePoints)return;
+  renderSourcePoints=sourcePoints.map(p=>({x:p.x,y:p.y}));
+  const faceHeight=Math.abs(sourcePoints[152].y-sourcePoints[10].y);
+  const centerX=(sourcePoints[234].x+sourcePoints[454].x)/2;
+
+  const amounts=[FOREHEAD_ROW1,FOREHEAD_ROW2];
+  for(let row=0;row<FOREHEAD_ROWS;row++){
+    const amount=amounts[row];
+    const xExpand=1+amount*.28;
+    for(const id of FOREHEAD_BASE){
+      const b=sourcePoints[id];
+      renderSourcePoints.push({
+        x:centerX+(b.x-centerX)*xExpand,
+        y:b.y-faceHeight*amount
+      });
+    }
+  }
+}
+function buildLiveRenderPoints(lms){
+  const out=lms.slice(0,468).map(videoPointToOutput);
+  const faceHeight=Math.max(1,Math.abs(out[152].y-out[10].y));
+  const centerX=(out[234].x+out[454].x)/2;
+  const amounts=[FOREHEAD_ROW1,FOREHEAD_ROW2];
+
+  for(let row=0;row<FOREHEAD_ROWS;row++){
+    const amount=amounts[row];
+    const xExpand=1+amount*.28;
+    for(const id of FOREHEAD_BASE){
+      const b=out[id];
+      out.push({
+        x:centerX+(b.x-centerX)*xExpand,
+        y:b.y-faceHeight*amount
+      });
+    }
+  }
+  return out;
+}
+function drawExtendedForeheadGuide(){
+  if(!renderSourcePoints.length)return;
+  const rowLen=FOREHEAD_BASE.length;
+  const lastStart=468+(FOREHEAD_ROWS-1)*rowLen;
+  gctx.save();
+  gctx.strokeStyle="rgba(255,215,90,.72)";
+  gctx.lineWidth=3;
+  gctx.setLineDash([10,8]);
+  gctx.beginPath();
+  for(let i=0;i<rowLen;i++){
+    const p=renderSourcePoints[lastStart+i];
+    i?gctx.lineTo(p.x,p.y):gctx.moveTo(p.x,p.y);
+  }
+  gctx.stroke();
+  gctx.setLineDash([]);
+  gctx.fillStyle="rgba(255,215,90,.75)";
+  gctx.font="18px system-ui";
+  gctx.textAlign="center";
+  const mid=renderSourcePoints[lastStart+Math.floor(rowLen/2)];
+  gctx.fillText("EXTENDED FOREHEAD",mid.x,mid.y-12);
+  gctx.restore();
 }
 function buildTwin(){
   tctx.setTransform(1,0,0,1,0,0);tctx.clearRect(0,0,twin.width,twin.height);
@@ -564,6 +665,186 @@ function drawGuide(){
   gctx.clearRect(0,0,guide.width,guide.height);if(!sourcePoints)return;
   if(showMesh.checked){gctx.save();gctx.strokeStyle="rgba(255,255,255,.12)";gctx.lineWidth=1;for(const tri of triangles){const A=sourcePoints[tri[0]],B=sourcePoints[tri[1]],C=sourcePoints[tri[2]];gctx.beginPath();gctx.moveTo(A.x,A.y);gctx.lineTo(B.x,B.y);gctx.lineTo(C.x,C.y);gctx.closePath();gctx.stroke()}gctx.restore()}
   if(showFeatures.checked){featurePath(OVAL,"rgba(255,255,255,.56)",3,true);featurePath(LEFT_EYE,"rgba(80,210,255,.78)",3,true);featurePath(RIGHT_EYE,"rgba(80,210,255,.78)",3,true);featurePath(LEFT_BROW,"rgba(255,255,255,.44)",3);featurePath(RIGHT_BROW,"rgba(255,255,255,.44)",3);featurePath(LIPS,"rgba(255,120,170,.82)",3,true)}
+  drawExtendedForeheadGuide();
+}
+
+function avgPoint(ids){
+  let x=0,y=0;
+  for(const id of ids){x+=sourcePoints[id].x;y+=sourcePoints[id].y;}
+  return{x:x/ids.length,y:y/ids.length};
+}
+function boundsOf(ids){
+  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+  for(const id of ids){
+    const p=sourcePoints[id];
+    minX=Math.min(minX,p.x);maxX=Math.max(maxX,p.x);
+    minY=Math.min(minY,p.y);maxY=Math.max(maxY,p.y);
+  }
+  return{minX,maxX,minY,maxY,width:maxX-minX,height:maxY-minY,cx:(minX+maxX)/2,cy:(minY+maxY)/2};
+}
+function fillEllipse(x,y,rx,ry,color,alpha=1,rotation=0){
+  pctx.save();
+  pctx.globalAlpha=alpha;
+  pctx.fillStyle=color;
+  pctx.beginPath();
+  pctx.ellipse(x,y,rx,ry,rotation,0,Math.PI*2);
+  pctx.fill();
+  pctx.restore();
+}
+function strokeLine(points,color,width,alpha=1){
+  pctx.save();
+  pctx.globalAlpha=alpha;
+  pctx.strokeStyle=color;
+  pctx.lineWidth=width;
+  pctx.lineCap="round";
+  pctx.lineJoin="round";
+  pctx.beginPath();
+  points.forEach((p,i)=>i?pctx.lineTo(p.x,p.y):pctx.moveTo(p.x,p.y));
+  pctx.stroke();
+  pctx.restore();
+}
+function fillPoly(points,color,alpha=1){
+  pctx.save();
+  pctx.globalAlpha=alpha;
+  pctx.fillStyle=color;
+  pctx.beginPath();
+  points.forEach((p,i)=>i?pctx.lineTo(p.x,p.y):pctx.moveTo(p.x,p.y));
+  pctx.closePath();
+  pctx.fill();
+  pctx.restore();
+}
+function faceMetrics(){
+  const face=boundsOf(OVAL);
+  const leftEye=avgPoint(LEFT_EYE), rightEye=avgPoint(RIGHT_EYE);
+  const mouth=avgPoint(LIPS);
+  const nose=avgPoint([1,4,5,195]);
+  const forehead=sourcePoints[10];
+  const leftBrow=avgPoint(LEFT_BROW), rightBrow=avgPoint(RIGHT_BROW);
+  return{
+    face,leftEye,rightEye,mouth,nose,forehead,leftBrow,rightBrow,
+    eyeGap:Math.abs(rightEye.x-leftEye.x),
+    eyeY:(leftEye.y+rightEye.y)/2,
+    centerX:(leftEye.x+rightEye.x)/2
+  };
+}
+function drawAnimalEars(m,outerColor,innerColor,tipColor=null){
+  const topY=m.face.minY-m.face.height*.10;
+  const earW=m.face.width*.16;
+  const earH=m.face.height*.18;
+  const lx=m.face.cx-m.face.width*.23;
+  const rx=m.face.cx+m.face.width*.23;
+  fillPoly([{x:lx-earW*.75,y:topY+earH*.55},{x:lx,y:topY-earH*.55},{x:lx+earW*.75,y:topY+earH*.55}],outerColor,.95);
+  fillPoly([{x:rx-earW*.75,y:topY+earH*.55},{x:rx,y:topY-earH*.55},{x:rx+earW*.75,y:topY+earH*.55}],outerColor,.95);
+  if(innerColor){
+    fillPoly([{x:lx-earW*.38,y:topY+earH*.30},{x:lx,y:topY-earH*.20},{x:lx+earW*.38,y:topY+earH*.30}],innerColor,.88);
+    fillPoly([{x:rx-earW*.38,y:topY+earH*.30},{x:rx,y:topY-earH*.20},{x:rx+earW*.38,y:topY+earH*.30}],innerColor,.88);
+  }
+  if(tipColor){
+    fillPoly([{x:lx-earW*.72,y:topY+earH*.48},{x:lx,y:topY-earH*.52},{x:lx+earW*.18,y:topY+earH*.12}],tipColor,.95);
+    fillPoly([{x:rx+earW*.72,y:topY+earH*.48},{x:rx,y:topY-earH*.52},{x:rx-earW*.18,y:topY+earH*.12}],tipColor,.95);
+  }
+}
+function drawWhiskers(m,color){
+  const y=m.nose.y+m.face.height*.05;
+  const dx=m.face.width*.14, outer=m.face.width*.21;
+  const leftBase={x:m.nose.x-m.face.width*.08,y};
+  const rightBase={x:m.nose.x+m.face.width*.08,y};
+  strokeLine([leftBase,{x:leftBase.x-dx,y:y-m.face.height*.03},{x:leftBase.x-outer,y:y-m.face.height*.05}],color,3,.95);
+  strokeLine([leftBase,{x:leftBase.x-dx,y},{x:leftBase.x-outer,y}],color,3,.95);
+  strokeLine([leftBase,{x:leftBase.x-dx,y:y+m.face.height*.03},{x:leftBase.x-outer,y:y+m.face.height*.05}],color,3,.95);
+  strokeLine([rightBase,{x:rightBase.x+dx,y:y-m.face.height*.03},{x:rightBase.x+outer,y:y-m.face.height*.05}],color,3,.95);
+  strokeLine([rightBase,{x:rightBase.x+dx,y},{x:rightBase.x+outer,y}],color,3,.95);
+  strokeLine([rightBase,{x:rightBase.x+dx,y:y+m.face.height*.03},{x:rightBase.x+outer,y:y+m.face.height*.05}],color,3,.95);
+}
+function drawCatMask(){
+  const m=faceMetrics();
+  drawAnimalEars(m,"#161616","#ff8db8");
+  fillEllipse(m.leftEye.x,m.leftEye.y,m.face.width*.12,m.face.height*.09,"#111111",.86,-.18);
+  fillEllipse(m.rightEye.x,m.rightEye.y,m.face.width*.12,m.face.height*.09,"#111111",.86,.18);
+  fillEllipse(m.nose.x-m.face.width*.055,m.nose.y+m.face.height*.045,m.face.width*.07,m.face.height*.055,"#ffffff",.86);
+  fillEllipse(m.nose.x+m.face.width*.055,m.nose.y+m.face.height*.045,m.face.width*.07,m.face.height*.055,"#ffffff",.86);
+  fillPoly([{x:m.nose.x,y:m.nose.y+m.face.height*.02},{x:m.nose.x-m.face.width*.035,y:m.nose.y+m.face.height*.07},{x:m.nose.x+m.face.width*.035,y:m.nose.y+m.face.height*.07}],"#ff6fa6",.98);
+  strokeLine([{x:m.nose.x,y:m.nose.y+m.face.height*.07},{x:m.nose.x,y:m.mouth.y-m.face.height*.01}],"#2b2b2b",3,.95);
+  drawWhiskers(m,"#2b2b2b");
+}
+function drawTigerMask(){
+  const m=faceMetrics();
+  drawAnimalEars(m,"#ff8a00","#ffd28b","#111111");
+  fillEllipse(m.centerX,m.forehead.y+m.face.height*.11,m.face.width*.20,m.face.height*.12,"#ff9f1a",.88);
+  fillEllipse(m.leftEye.x-m.face.width*.03,m.leftEye.y+m.face.height*.02,m.face.width*.16,m.face.height*.11,"#ff9f1a",.88,-.18);
+  fillEllipse(m.rightEye.x+m.face.width*.03,m.rightEye.y+m.face.height*.02,m.face.width*.16,m.face.height*.11,"#ff9f1a",.88,.18);
+  fillEllipse(m.nose.x-m.face.width*.06,m.nose.y+m.face.height*.05,m.face.width*.08,m.face.height*.06,"#fff5dc",.94);
+  fillEllipse(m.nose.x+m.face.width*.06,m.nose.y+m.face.height*.05,m.face.width*.08,m.face.height*.06,"#fff5dc",.94);
+  fillPoly([{x:m.nose.x,y:m.nose.y+m.face.height*.02},{x:m.nose.x-m.face.width*.04,y:m.nose.y+m.face.height*.08},{x:m.nose.x+m.face.width*.04,y:m.nose.y+m.face.height*.08}],"#2a1a12",.97);
+  const stripeW=m.face.width*.02;
+  strokeLine([{x:m.centerX,y:m.face.minY+m.face.height*.06},{x:m.centerX,y:m.face.minY+m.face.height*.19}],"#1b130e",8,.95);
+  strokeLine([{x:m.centerX-m.face.width*.06,y:m.face.minY+m.face.height*.11},{x:m.centerX-m.face.width*.14,y:m.face.minY+m.face.height*.19}],"#1b130e",6,.95);
+  strokeLine([{x:m.centerX+m.face.width*.06,y:m.face.minY+m.face.height*.11},{x:m.centerX+m.face.width*.14,y:m.face.minY+m.face.height*.19}],"#1b130e",6,.95);
+  strokeLine([{x:m.leftEye.x-m.face.width*.14,y:m.leftEye.y-m.face.height*.02},{x:m.leftEye.x-m.face.width*.04,y:m.leftEye.y+m.face.height*.04}],"#1b130e",6,.95);
+  strokeLine([{x:m.leftEye.x-m.face.width*.16,y:m.leftEye.y+m.face.height*.05},{x:m.leftEye.x-m.face.width*.05,y:m.leftEye.y+m.face.height*.09}],"#1b130e",6,.95);
+  strokeLine([{x:m.rightEye.x+m.face.width*.14,y:m.rightEye.y-m.face.height*.02},{x:m.rightEye.x+m.face.width*.04,y:m.rightEye.y+m.face.height*.04}],"#1b130e",6,.95);
+  strokeLine([{x:m.rightEye.x+m.face.width*.16,y:m.rightEye.y+m.face.height*.05},{x:m.rightEye.x+m.face.width*.05,y:m.rightEye.y+m.face.height*.09}],"#1b130e",6,.95);
+}
+function drawPandaMask(){
+  const m=faceMetrics();
+  drawAnimalEars(m,"#111111","#111111");
+  fillEllipse(m.leftEye.x,m.leftEye.y,m.face.width*.15,m.face.height*.12,"#111111",.95,-.2);
+  fillEllipse(m.rightEye.x,m.rightEye.y,m.face.width*.15,m.face.height*.12,"#111111",.95,.2);
+  fillEllipse(m.nose.x-m.face.width*.06,m.nose.y+m.face.height*.05,m.face.width*.085,m.face.height*.065,"#ffffff",.82);
+  fillEllipse(m.nose.x+m.face.width*.06,m.nose.y+m.face.height*.05,m.face.width*.085,m.face.height*.065,"#ffffff",.82);
+  fillPoly([{x:m.nose.x,y:m.nose.y+m.face.height*.02},{x:m.nose.x-m.face.width*.04,y:m.nose.y+m.face.height*.08},{x:m.nose.x+m.face.width*.04,y:m.nose.y+m.face.height*.08}],"#111111",.98);
+  strokeLine([{x:m.nose.x,y:m.nose.y+m.face.height*.075},{x:m.nose.x,y:m.mouth.y-m.face.height*.01}],"#111111",3,.95);
+}
+function drawFoxMask(){
+  const m=faceMetrics();
+  drawAnimalEars(m,"#ff6b1a","#ffd8b0","#2c2018");
+  fillPoly([
+    {x:m.face.cx-m.face.width*.30,y:m.leftEye.y-m.face.height*.03},
+    {x:m.face.cx-m.face.width*.12,y:m.face.minY+m.face.height*.08},
+    {x:m.face.cx,y:m.face.minY+m.face.height*.14},
+    {x:m.face.cx-m.face.width*.03,y:m.nose.y+m.face.height*.02},
+    {x:m.face.cx-m.face.width*.18,y:m.leftEye.y+m.face.height*.16},
+    {x:m.face.cx-m.face.width*.33,y:m.leftEye.y+m.face.height*.07}
+  ],"#ff7c21",.9);
+  fillPoly([
+    {x:m.face.cx+m.face.width*.30,y:m.rightEye.y-m.face.height*.03},
+    {x:m.face.cx+m.face.width*.12,y:m.face.minY+m.face.height*.08},
+    {x:m.face.cx,y:m.face.minY+m.face.height*.14},
+    {x:m.face.cx+m.face.width*.03,y:m.nose.y+m.face.height*.02},
+    {x:m.face.cx+m.face.width*.18,y:m.rightEye.y+m.face.height*.16},
+    {x:m.face.cx+m.face.width*.33,y:m.rightEye.y+m.face.height*.07}
+  ],"#ff7c21",.9);
+  fillEllipse(m.nose.x-m.face.width*.06,m.nose.y+m.face.height*.055,m.face.width*.09,m.face.height*.065,"#fff6e8",.94);
+  fillEllipse(m.nose.x+m.face.width*.06,m.nose.y+m.face.height*.055,m.face.width*.09,m.face.height*.065,"#fff6e8",.94);
+  fillPoly([{x:m.nose.x,y:m.nose.y+m.face.height*.02},{x:m.nose.x-m.face.width*.04,y:m.nose.y+m.face.height*.08},{x:m.nose.x+m.face.width*.04,y:m.nose.y+m.face.height*.08}],"#2b2018",.98);
+}
+function drawRabbitMask(){
+  const m=faceMetrics();
+  drawAnimalEars(m,"#ffffff","#ff9cc0");
+  fillEllipse(m.leftEye.x,m.leftEye.y,m.face.width*.11,m.face.height*.08,"#ffdce8",.72,-.18);
+  fillEllipse(m.rightEye.x,m.rightEye.y,m.face.width*.11,m.face.height*.08,"#ffdce8",.72,.18);
+  fillEllipse(m.nose.x-m.face.width*.055,m.nose.y+m.face.height*.05,m.face.width*.08,m.face.height*.06,"#ffffff",.92);
+  fillEllipse(m.nose.x+m.face.width*.055,m.nose.y+m.face.height*.05,m.face.width*.08,m.face.height*.06,"#ffffff",.92);
+  fillPoly([{x:m.nose.x,y:m.nose.y+m.face.height*.03},{x:m.nose.x-m.face.width*.032,y:m.nose.y+m.face.height*.073},{x:m.nose.x+m.face.width*.032,y:m.nose.y+m.face.height*.073}],"#ff7fa8",.98);
+  strokeLine([{x:m.nose.x,y:m.nose.y+m.face.height*.073},{x:m.nose.x,y:m.mouth.y-m.face.height*.005}],"#9b5a66",2,.95);
+  fillPoly([{x:m.nose.x-m.face.width*.03,y:m.mouth.y-m.face.height*.005},{x:m.nose.x-m.face.width*.005,y:m.mouth.y-m.face.height*.005},{x:m.nose.x-m.face.width*.005,y:m.mouth.y+m.face.height*.05},{x:m.nose.x-m.face.width*.03,y:m.mouth.y+m.face.height*.05}],"#ffffff",.95);
+  fillPoly([{x:m.nose.x+m.face.width*.005,y:m.mouth.y-m.face.height*.005},{x:m.nose.x+m.face.width*.03,y:m.mouth.y-m.face.height*.005},{x:m.nose.x+m.face.width*.03,y:m.mouth.y+m.face.height*.05},{x:m.nose.x+m.face.width*.005,y:m.mouth.y+m.face.height*.05}],"#ffffff",.95);
+  drawWhiskers(m,"#9b5a66");
+}
+function applyAnimalMask(name){
+  if(!sourcePoints)return;
+  snapshot();
+  pctx.clearRect(0,0,paint.width,paint.height);
+  switch(name){
+    case "cat": drawCatMask(); break;
+    case "tiger": drawTigerMask(); break;
+    case "panda": drawPandaMask(); break;
+    case "fox": drawFoxMask(); break;
+    case "rabbit": drawRabbitMask(); break;
+    default: drawCatMask(); break;
+  }
+  textureDirty=true;
+  status.textContent=`Loaded ${name} animal mask template.`;
 }
 function drawDemo(){
   if(!sourcePoints)return;snapshot();pctx.clearRect(0,0,paint.width,paint.height);textureDirty=true;pctx.save();pctx.lineCap="round";pctx.lineJoin="round";pctx.globalAlpha=.9;
@@ -605,10 +886,11 @@ function videoPointToOutput(p){
   return{x:mirroredX*shownW-cropX,y:p.y*shownH-cropY};
 }
 function drawWarp(lms){
-  if(!sourcePoints||!gl)return;
-  const pos=new Float32Array(468*2);
-  for(let i=0;i<468;i++){
-    const q=videoPointToOutput(lms[i]);
+  if(!renderSourcePoints.length||!gl)return;
+  const livePoints=buildLiveRenderPoints(lms);
+  const pos=new Float32Array(livePoints.length*2);
+  for(let i=0;i<livePoints.length;i++){
+    const q=livePoints[i];
     pos[i*2]=(q.x/output.width)*2-1;
     pos[i*2+1]=1-(q.y/output.height)*2;
   }
@@ -634,7 +916,7 @@ async function initTracker(){
   if(faceLandmarker)return;status.textContent="Loading MediaPipe face tracker…";
   const vision=await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/wasm");
   faceLandmarker=await FaceLandmarker.createFromOptions(vision,{baseOptions:{modelAssetPath:"https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",delegate:"GPU"},runningMode:"VIDEO",numFaces:1,minFaceDetectionConfidence:.6,minFacePresenceConfidence:.6,minTrackingConfidence:.55});
-  triangles=buildTriangles();if(triangles.length<300)throw new Error("Could not build face topology.");rebuildGLTopology();
+  triangles=buildTriangles();if(triangles.length<300)throw new Error("Could not build face topology.");buildExtendedTopology();rebuildGLTopology();
 }
 async function startCamera(){
   try{cameraBtn.disabled=true;mobileCameraBtn.disabled=true;await initTracker();stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",width:isMobile?{ideal:480,max:640}:{ideal:640,max:960},height:isMobile?{ideal:360,max:480}:{ideal:480,max:720},frameRate:{ideal:30,max:30}},audio:false});video.srcObject=stream;await video.play();stageMsg.classList.add("hidden");cameraBtn.textContent="Stop camera";mobileCameraBtn.textContent="Stop";cameraBtn.disabled=false;mobileCameraBtn.disabled=false;cameraBtn.onclick=stopCamera;mobileCameraBtn.onclick=stopCamera;recalibrateBtn.disabled=false;mobileRecalibrateBtn.disabled=false;beginCalibration();if(innerWidth<=900)setMobileView("camera");lastVideoTime=-1;loop()}
