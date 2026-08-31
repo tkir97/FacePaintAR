@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AR Face Painter v1.5</title>
+<style>
+:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#f4f4f5;background:#09090b;color-scheme:dark}
+*{box-sizing:border-box}body{margin:0;background:#09090b;min-height:100vh}button,input{font:inherit}
+.app{width:min(1480px,100%);margin:auto;padding:18px}.top{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:14px}
+h1{font-size:20px;margin:0}.sub,.status{font-size:12px;color:#a1a1aa;line-height:1.5}.actions{display:flex;gap:8px;flex-wrap:wrap}
+button{border:1px solid #3f3f46;background:#27272a;color:#fafafa;border-radius:10px;min-height:42px;padding:0 13px;cursor:pointer}
+button.primary{background:#fafafa;color:#09090b;border-color:#fafafa}button:disabled{opacity:.45;cursor:not-allowed}
+.grid{display:grid;grid-template-columns:minmax(340px,.92fr) minmax(440px,1.08fr);gap:14px}.panel{background:#18181b;border:1px solid #29292f;border-radius:16px;overflow:hidden}
+.head{height:50px;padding:0 15px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #29292f;gap:10px}.head strong{font-size:14px}
+.badge{font-size:11px;padding:4px 7px;border:1px solid #3f3f46;border-radius:999px;color:#d4d4d8;white-space:nowrap}.body{padding:14px}
+.paintWrap{position:relative;width:100%;aspect-ratio:1/1;background:#101014;border:1px solid #303038;border-radius:14px;overflow:hidden;touch-action:none}
+.paintWrap canvas{position:absolute;inset:0;width:100%;height:100%}#twin{z-index:1;pointer-events:none}#guide{z-index:2;pointer-events:none}#paint{z-index:3;cursor:crosshair}
+.calibrationMessage{position:absolute;inset:0;z-index:4;display:grid;place-items:center;text-align:center;padding:30px;background:rgba(10,10,13,.78);color:#d4d4d8;font-size:13px;line-height:1.55;pointer-events:none}
+.calibrationMessage.hidden{display:none}.tools{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}.tool{background:#111114;border:1px solid #29292f;border-radius:11px;padding:10px}
+label{font-size:11px;color:#a1a1aa;display:block;margin-bottom:7px}input[type=range]{width:100%}input[type=color]{width:100%;height:36px;border:0;padding:0;background:transparent}select,input[type=text]{width:100%;min-height:36px;border:1px solid #3f3f46;background:#18181b;color:#fafafa;border-radius:8px;padding:0 10px}
+.stage{position:relative;width:100%;aspect-ratio:4/3;background:#050507;overflow:hidden}#video,#output{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+#video{z-index:1;transform:scaleX(-1)}#output{z-index:2;pointer-events:none;transform:none}.stageMsg{position:absolute;inset:0;z-index:3;display:grid;place-items:center;text-align:center;padding:28px;color:#a1a1aa;background:linear-gradient(180deg,rgba(9,9,11,.2),rgba(9,9,11,.75))}
+.stageMsg.hidden{display:none}.metrics{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.dot{width:8px;height:8px;border-radius:50%;background:#71717a;display:inline-block;margin-right:6px}.dot.live{background:#22c55e}
+.notice{margin-top:10px;padding:10px 12px;border-radius:10px;background:#111114;border:1px solid #29292f;color:#a1a1aa;font-size:12px;line-height:1.45}
+.row{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.switch{display:flex;align-items:center;gap:7px;font-size:11px;color:#a1a1aa}.switch input{width:16px;height:16px}
+
+.mobileNav{display:none}
+.viewTitle{display:none}
+@media(max-width:900px){
+  body{overflow:hidden}
+  .app{padding:0;width:100%;height:100vh;max-width:none;display:flex;flex-direction:column}
+  .top{display:none}
+  .grid{display:block;flex:1;min-height:0}
+  .panel{border:0;border-radius:0;height:100%;background:#09090b}
+  .panel .head{height:48px;background:#111114;position:relative;z-index:5}
+  .panel .body{padding:12px}
+  .studioPanel,.cameraPanel{display:none}
+  .studioPanel.active,.cameraPanel.active{display:block}
+  .studioPanel{height:100%;overflow-y:auto;padding-bottom:82px}
+  .cameraPanel{height:100%;position:relative;padding-bottom:68px}
+  .cameraPanel .body{position:absolute;left:0;right:0;bottom:68px;z-index:4;background:linear-gradient(180deg,transparent,rgba(9,9,11,.88));padding:18px 14px 12px}
+  .stage{position:absolute;inset:48px 0 68px 0;width:auto;height:auto;aspect-ratio:auto;background:#000}
+  #video,#output{width:100%;height:100%;object-fit:cover}
+  .paintWrap{width:min(100%,620px);margin:0 auto}
+  .tools{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .actions{justify-content:center}
+  .mobileNav{
+    position:fixed;left:0;right:0;bottom:0;z-index:50;
+    display:grid;grid-template-columns:1fr 1fr;gap:8px;
+    padding:8px 10px calc(8px + env(safe-area-inset-bottom));
+    background:rgba(17,17,20,.96);border-top:1px solid #29292f;
+    backdrop-filter:blur(12px)
+  }
+  .mobileNav button{min-height:48px;font-weight:600}
+  .mobileNav button.active{background:#fafafa;color:#09090b;border-color:#fafafa}
+  .viewTitle{display:block;font-size:13px;color:#d4d4d8}
+  .cameraControls{
+    position:absolute;right:12px;top:60px;z-index:5;display:flex;flex-direction:column;gap:8px
+  }
+  .cameraControls button{min-width:46px;padding:0 10px;background:rgba(24,24,27,.86);backdrop-filter:blur(8px)}
+}
+@media(max-width:520px){
+  .panel .body{padding:10px}
+  .tools{grid-template-columns:1fr 1fr}
+  .tool{padding:9px}
+  .notice{font-size:11px}
+  .paintWrap{border-radius:0;border-left:0;border-right:0}
+}
+
+</style>
+</head>
+<body>
+<main class="app">
+<div class="top">
+  <div>
+    <h1>AR Face Painter <span class="badge">V1.5 mobile studio</span></h1>
+    <div class="sub" id="status">Mobile V1.5 separates creation into two focused full-screen views: Mask Studio and Camera AR.</div>
+  </div>
+  <div class="actions"><button id="recalibrateBtn" disabled>Rebuild digital twin</button><button class="primary" id="cameraBtn">Start camera</button></div>
+</div>
+
+<section class="grid">
+<article class="panel studioPanel active" id="studioView">
+  <div class="head"><strong>Digital-twin painter</strong><span class="badge" id="calBadge">not calibrated</span></div>
+  <div class="body">
+    <div class="paintWrap">
+      <canvas id="twin" width="896" height="896"></canvas>
+      <canvas id="guide" width="896" height="896"></canvas>
+      <canvas id="paint" width="896" height="896" aria-label="Face painting canvas"></canvas>
+      <div class="calibrationMessage" id="calibrationMessage">Start the camera and look directly toward it.<br><br>V1.2 will choose the best frontal frame and flatten your real face into this editor.</div>
+    </div>
+
+    <div class="tools">
+      <div class="tool"><label for="color">Brush colour</label><input id="color" type="color" value="#ff2d7a"></div>
+      <div class="tool"><label for="size">Brush size <span id="sizeOut">25</span>px</label><input id="size" type="range" min="3" max="100" value="25"></div>
+      <div class="tool"><label for="opacity">Brush opacity <span id="opacityOut">90</span>%</label><input id="opacity" type="range" min="5" max="100" value="90"></div>
+      <div class="tool"><label for="maskOpacity">AR opacity <span id="maskOpacityOut">90</span>%</label><input id="maskOpacity" type="range" min="10" max="100" value="90"></div>
+      <div class="tool"><label for="twinOpacity">Twin visibility <span id="twinOpacityOut">75</span>%</label><input id="twinOpacity" type="range" min="0" max="100" value="75"></div>
+      <div class="tool"><label for="stampType">Stamp shape</label><select id="stampType"><option value="star">Star</option><option value="heart">Heart</option><option value="sparkle">Sparkle</option><option value="flower">Flower</option><option value="lightning">Lightning</option><option value="diamond">Diamond</option></select></div>
+      <div class="tool"><label for="emojiSelect">Emoji preset</label><select id="emojiSelect"><option>✨</option><option>⭐</option><option>🔥</option><option>❤️</option><option>🦋</option><option>🌈</option><option>⚡</option><option>❄️</option><option>🎭</option><option>👑</option></select></div>
+      <div class="tool"><label for="emojiInput">Custom emoji (optional)</label><input id="emojiInput" type="text" placeholder="e.g. 😎 or 🐯"></div>
+      <div class="tool"><label for="stampRotation">Stamp rotation <span id="stampRotationOut">0</span>°</label><input id="stampRotation" type="range" min="0" max="360" value="0"></div>
+      <div class="tool">
+        <label>Editor overlays</label>
+        <div class="row">
+          <label class="switch"><input id="showMesh" type="checkbox"> mesh</label>
+          <label class="switch"><input id="showFeatures" type="checkbox" checked> features</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="actions" style="margin-top:11px">
+      <button id="brushBtn">Brush</button><button id="eraserBtn">Eraser</button><button id="stampBtn">Stamp</button><button id="emojiBtn">Emoji</button><button id="undoBtn">Undo</button><button id="clearBtn">Clear</button><button id="demoBtn" disabled>Feature demo</button>
+    </div>
+    <div class="notice">Brush and eraser work as before. In <b>Stamp</b> or <b>Emoji</b> mode, click anywhere on the twin to place a sticker that will track on the live face.</div>
+  </div>
+</article>
+
+<article class="panel cameraPanel" id="cameraView">
+  <div class="head"><strong>Live AR preview</strong><div class="metrics"><span class="badge" id="fpsBadge">camera off</span><span class="badge" id="latencyBadge">GPU mesh</span><span class="badge"><span class="dot" id="trackDot"></span><span id="trackLabel">idle</span></span></div></div>
+  <div class="cameraControls"><button id="mobileCameraBtn" title="Start or stop camera">Camera</button><button id="mobileRecalibrateBtn" title="Rebuild digital twin" disabled>Calibrate</button></div><div class="stage" id="stage"><video id="video" autoplay playsinline muted></video><canvas id="output"></canvas><div class="stageMsg" id="stageMsg">Start webcam to build your digital twin.</div></div>
+  <div class="body"><div class="status" id="trackingStatus">V1.4 supports brush painting plus stamps and emoji stickers, all projected through the same low-latency GPU face mesh.</div></div>
+</article>
+</section>
+<nav class="mobileNav" aria-label="App views">
+  <button id="studioTab" class="active">Mask Studio</button>
+  <button id="cameraTab">Camera AR</button>
+</nav>
+</main>
+
+<script type="module">
+import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/+esm";
+const $=id=>document.getElementById(id);
+const paint=$("paint"),guide=$("guide"),twin=$("twin");
+const pctx=paint.getContext("2d"),gctx=guide.getContext("2d"),tctx=twin.getContext("2d");
+const video=$("video"),output=$("output");
+let gl=null, glProgram=null, glPosBuffer=null, glUvBuffer=null, glIndexBuffer=null, glTexture=null;
+let glPosLoc=-1, glUvLoc=-1, glAlphaLoc=null, glIndexCount=0, textureDirty=true;
+const cameraBtn=$("cameraBtn"),recalibrateBtn=$("recalibrateBtn"),demoBtn=$("demoBtn"),mobileCameraBtn=$("mobileCameraBtn"),mobileRecalibrateBtn=$("mobileRecalibrateBtn"),studioTab=$("studioTab"),cameraTab=$("cameraTab"),studioView=$("studioView"),cameraView=$("cameraView");
+const status=$("status"),trackingStatus=$("trackingStatus"),stageMsg=$("stageMsg"),calibrationMessage=$("calibrationMessage"),calBadge=$("calBadge"),fpsBadge=$("fpsBadge"),trackDot=$("trackDot"),trackLabel=$("trackLabel");
+const color=$("color"),size=$("size"),opacity=$("opacity"),maskOpacity=$("maskOpacity"),twinOpacity=$("twinOpacity"),stampType=$("stampType"),emojiSelect=$("emojiSelect"),emojiInput=$("emojiInput"),stampRotation=$("stampRotation"),showMesh=$("showMesh"),showFeatures=$("showFeatures");
+
+let faceLandmarker=null,stream=null,raf=0,lastVideoTime=-1,lastFrameAt=performance.now();
+let triangles=[],reference=null,sourcePoints=null,smoothed=null;
+let calibrating=false,calCount=0,bestScore=Infinity,bestLandmarks=null,bestFrame=null;
+let mode="brush",drawing=false,lastPoint=null,history=[];
+
+const OVAL=[10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109];
+const LIPS=[61,146,91,181,84,17,314,405,321,375,291,308,324,318,402,317,14,87,178,88,95,78,191,80,81,82,13,312,311,310,415];
+const LEFT_EYE=[263,249,390,373,374,380,381,382,362,466,388,387,386,385,384,398];
+const RIGHT_EYE=[33,7,163,144,145,153,154,155,133,173,157,158,159,160,161,246];
+const LEFT_BROW=[276,283,282,295,285,300,293,334,296,336];
+const RIGHT_BROW=[46,53,52,65,55,70,63,105,66,107];
+
+function getEdge(e,k){return e?.[k] ?? e?.[k==="start"?0:1];}
+function buildTriangles(){
+  const edges=FaceLandmarker.FACE_LANDMARKS_TESSELATION||[],adj=Array.from({length:468},()=>new Set());
+  for(const e of edges){const a=getEdge(e,"start"),b=getEdge(e,"end");if(Number.isInteger(a)&&Number.isInteger(b)&&a<468&&b<468){adj[a].add(b);adj[b].add(a)}}
+  const out=[],seen=new Set();
+  for(let a=0;a<468;a++)for(const b of adj[a])if(b>a)for(const c of adj[a])if(c>b&&adj[b].has(c)){const k=`${a},${b},${c}`;if(!seen.has(k)){seen.add(k);out.push([a,b,c])}}
+  return out;
+}
+function snapshot(){if(history.length>=22)history.shift();history.push(pctx.getImageData(0,0,paint.width,paint.height))}
+function point(e){const r=paint.getBoundingClientRect();return{x:(e.clientX-r.left)*paint.width/r.width,y:(e.clientY-r.top)*paint.height/r.height}}
+paint.addEventListener("pointerdown",e=>{
+  if(!reference)return;
+  e.preventDefault();
+  const pt=point(e);
+  if(mode==="stamp"){
+    snapshot();
+    placeStamp(pt);
+    return;
+  }
+  if(mode==="emoji"){
+    snapshot();
+    placeEmoji(pt);
+    return;
+  }
+  snapshot();
+  drawing=true;
+  lastPoint=pt;
+  paint.setPointerCapture?.(e.pointerId);
+});
+paint.addEventListener("pointermove",e=>{if(!drawing)return;e.preventDefault();const q=point(e);pctx.save();pctx.lineCap="round";pctx.lineJoin="round";pctx.lineWidth=+size.value;pctx.globalAlpha=+opacity.value/100;pctx.globalCompositeOperation=mode==="eraser"?"destination-out":"source-over";pctx.strokeStyle=color.value;pctx.beginPath();pctx.moveTo(lastPoint.x,lastPoint.y);pctx.lineTo(q.x,q.y);pctx.stroke();pctx.restore();textureDirty=true;lastPoint=q});
+function endDraw(e){drawing=false;lastPoint=null;try{paint.releasePointerCapture?.(e.pointerId)}catch{}}
+paint.addEventListener("pointerup",endDraw);paint.addEventListener("pointercancel",endDraw);
+
+size.oninput=()=>$("sizeOut").textContent=size.value;opacity.oninput=()=>$("opacityOut").textContent=opacity.value;maskOpacity.oninput=()=>$("maskOpacityOut").textContent=maskOpacity.value;
+twinOpacity.oninput=()=>{twin.style.opacity=(+twinOpacity.value/100).toString();$("twinOpacityOut").textContent=twinOpacity.value};
+stampRotation.oninput=()=>$("stampRotationOut").textContent=stampRotation.value;
+showMesh.onchange=drawGuide;showFeatures.onchange=drawGuide;
+$("brushBtn").onclick=()=>{mode="brush";status.textContent="Brush selected."};
+$("eraserBtn").onclick=()=>{mode="eraser";status.textContent="Eraser selected."};
+$("stampBtn").onclick=()=>{mode="stamp";status.textContent="Stamp mode selected. Click the twin to place a shape."};
+$("emojiBtn").onclick=()=>{mode="emoji";status.textContent="Emoji mode selected. Click the twin to place an emoji."};
+$("undoBtn").onclick=()=>{const x=history.pop();if(x){pctx.putImageData(x,0,0);textureDirty=true}};
+$("clearBtn").onclick=()=>{snapshot();pctx.clearRect(0,0,paint.width,paint.height);textureDirty=true};
+demoBtn.onclick=drawDemo;
+
+twin.style.opacity=".75";
+
+function setMobileView(view){
+  const cameraActive=view==="camera";
+  studioView.classList.toggle("active",!cameraActive);
+  cameraView.classList.toggle("active",cameraActive);
+  studioTab.classList.toggle("active",!cameraActive);
+  cameraTab.classList.toggle("active",cameraActive);
+  if(cameraActive){
+    requestAnimationFrame(()=>{resizeOutput();});
+  }
+}
+studioTab.onclick=()=>setMobileView("studio");
+cameraTab.onclick=()=>setMobileView("camera");
+
+
+
+function stampPath(type,r){
+  const path=new Path2D();
+  if(type==="heart"){
+    path.moveTo(0,r*.92);
+    path.bezierCurveTo(-r*.9,r*.3,-r*.95,-r*.45,-r*.32,-r*.52);
+    path.bezierCurveTo(-r*.02,-r*.86,r*.02,-r*.86,r*.32,-r*.52);
+    path.bezierCurveTo(r*.95,-r*.45,r*.9,r*.3,0,r*.92);
+    path.closePath();
+    return path;
+  }
+  if(type==="diamond"){
+    path.moveTo(0,-r);
+    path.lineTo(r*.78,0);
+    path.lineTo(0,r);
+    path.lineTo(-r*.78,0);
+    path.closePath();
+    return path;
+  }
+  if(type==="lightning"){
+    path.moveTo(-r*.12,-r);
+    path.lineTo(r*.18,-r*.22);
+    path.lineTo(-r*.02,-r*.22);
+    path.lineTo(r*.14,r);
+    path.lineTo(-r*.30,r*.10);
+    path.lineTo(-r*.06,r*.10);
+    path.closePath();
+    return path;
+  }
+  if(type==="sparkle"){
+    path.moveTo(0,-r); path.lineTo(r*.18,-r*.18); path.lineTo(r,0); path.lineTo(r*.18,r*.18);
+    path.lineTo(0,r); path.lineTo(-r*.18,r*.18); path.lineTo(-r,0); path.lineTo(-r*.18,-r*.18);
+    path.closePath();
+    return path;
+  }
+  if(type==="flower"){
+    for(let i=0;i<6;i++){
+      const a=(Math.PI*2*i)/6;
+      const x=Math.cos(a)*r*.48, y=Math.sin(a)*r*.48;
+      path.moveTo(x+r*.28,y);
+      path.arc(x,y,r*.28,0,Math.PI*2);
+    }
+    path.moveTo(r*.18,0); path.arc(0,0,r*.18,0,Math.PI*2);
+    return path;
+  }
+  // default star
+  for(let i=0;i<10;i++){
+    const rr=i%2===0?r:r*.42, a=-Math.PI/2 + (Math.PI*i)/5;
+    const x=Math.cos(a)*rr, y=Math.sin(a)*rr;
+    i===0 ? path.moveTo(x,y) : path.lineTo(x,y);
+  }
+  path.closePath();
+  return path;
+}
+function placeStamp(pt){
+  const radius=Math.max(10,+size.value*1.15);
+  const angle=(+stampRotation.value)*Math.PI/180;
+  const type=stampType.value;
+  pctx.save();
+  pctx.translate(pt.x,pt.y);
+  pctx.rotate(angle);
+  pctx.globalAlpha=+opacity.value/100;
+  pctx.fillStyle=color.value;
+  pctx.strokeStyle="rgba(255,255,255,.35)";
+  pctx.lineWidth=Math.max(1,radius*.08);
+  const path=stampPath(type,radius);
+  pctx.fill(path);
+  if(type!=="flower"){pctx.stroke(path);}
+  textureDirty=true;
+  pctx.restore();
+}
+function placeEmoji(pt){
+  const emoji=(emojiInput.value.trim()||emojiSelect.value||"✨");
+  const angle=(+stampRotation.value)*Math.PI/180;
+  const px=Math.max(24,+size.value*2.2);
+  pctx.save();
+  pctx.translate(pt.x,pt.y);
+  pctx.rotate(angle);
+  pctx.globalAlpha=+opacity.value/100;
+  pctx.font=`${px}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Segoe UI Symbol",system-ui,sans-serif`;
+  pctx.textAlign="center";
+  pctx.textBaseline="middle";
+  pctx.fillText(emoji,0,0);
+  textureDirty=true;
+  pctx.restore();
+}
+
+function resizeOutput(){
+  const r=$("stage").getBoundingClientRect(),dpr=Math.min(devicePixelRatio||1,1.35);
+  output.width=Math.round(r.width*dpr);output.height=Math.round(r.height*dpr);
+  if(gl) gl.viewport(0,0,output.width,output.height);
+}
+addEventListener("resize",resizeOutput);resizeOutput();
+
+function compileShader(type,source){
+  const s=gl.createShader(type);gl.shaderSource(s,source);gl.compileShader(s);
+  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(s)||"Shader compile failed");
+  return s;
+}
+function initGL(){
+  if(gl)return;
+  gl=output.getContext("webgl",{alpha:true,antialias:true,premultipliedAlpha:true,preserveDrawingBuffer:false});
+  if(!gl)throw new Error("WebGL is required for V1.3 low-latency rendering.");
+  const vs=compileShader(gl.VERTEX_SHADER,`
+    attribute vec2 a_position;
+    attribute vec2 a_uv;
+    varying vec2 v_uv;
+    void main(){gl_Position=vec4(a_position,0.0,1.0);v_uv=a_uv;}
+  `);
+  const fs=compileShader(gl.FRAGMENT_SHADER,`
+    precision mediump float;
+    varying vec2 v_uv;
+    uniform sampler2D u_texture;
+    uniform float u_alpha;
+    void main(){
+      vec4 c=texture2D(u_texture,v_uv);
+      gl_FragColor=vec4(c.rgb,c.a*u_alpha);
+    }
+  `);
+  glProgram=gl.createProgram();gl.attachShader(glProgram,vs);gl.attachShader(glProgram,fs);gl.linkProgram(glProgram);
+  if(!gl.getProgramParameter(glProgram,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(glProgram)||"Shader link failed");
+  gl.useProgram(glProgram);
+  glPosLoc=gl.getAttribLocation(glProgram,"a_position");
+  glUvLoc=gl.getAttribLocation(glProgram,"a_uv");
+  glAlphaLoc=gl.getUniformLocation(glProgram,"u_alpha");
+
+  glPosBuffer=gl.createBuffer();glUvBuffer=gl.createBuffer();glIndexBuffer=gl.createBuffer();
+  glTexture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,glTexture);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+  gl.disable(gl.DEPTH_TEST);
+  gl.clearColor(0,0,0,0);
+  gl.viewport(0,0,output.width,output.height);
+}
+function rebuildGLTopology(){
+  initGL();
+  const indices=new Uint16Array(triangles.flat());
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,glIndexBuffer);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,indices,gl.STATIC_DRAW);
+  glIndexCount=indices.length;
+}
+function rebuildGLUV(){
+  if(!gl||!sourcePoints)return;
+  const uv=new Float32Array(468*2);
+  for(let i=0;i<468;i++){
+    uv[i*2]=sourcePoints[i].x/paint.width;
+    uv[i*2+1]=sourcePoints[i].y/paint.height;
+  }
+  gl.bindBuffer(gl.ARRAY_BUFFER,glUvBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER,uv,gl.STATIC_DRAW);
+}
+function uploadPaintTexture(){
+  if(!gl||!textureDirty)return;
+  gl.bindTexture(gl.TEXTURE_2D,glTexture);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,true);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,paint);
+  textureDirty=false;
+}
+function clearGL(){if(gl){gl.viewport(0,0,output.width,output.height);gl.clear(gl.COLOR_BUFFER_BIT)}}
+
+
+function affine(src,dst){
+  const [s0,s1,s2]=src,[d0,d1,d2]=dst,den=s0.x*(s1.y-s2.y)+s1.x*(s2.y-s0.y)+s2.x*(s0.y-s1.y);if(Math.abs(den)<1e-7)return null;
+  return[
+    (d0.x*(s1.y-s2.y)+d1.x*(s2.y-s0.y)+d2.x*(s0.y-s1.y))/den,
+    (d0.y*(s1.y-s2.y)+d1.y*(s2.y-s0.y)+d2.y*(s0.y-s1.y))/den,
+    (d0.x*(s2.x-s1.x)+d1.x*(s0.x-s2.x)+d2.x*(s1.x-s0.x))/den,
+    (d0.y*(s2.x-s1.x)+d1.y*(s0.x-s2.x)+d2.y*(s1.x-s0.x))/den,
+    (d0.x*(s1.x*s2.y-s2.x*s1.y)+d1.x*(s2.x*s0.y-s0.x*s2.y)+d2.x*(s0.x*s1.y-s1.x*s0.y))/den,
+    (d0.y*(s1.x*s2.y-s2.x*s1.y)+d1.y*(s2.x*s0.y-s0.x*s2.y)+d2.y*(s0.x*s1.y-s1.x*s0.y))/den
+  ];
+}
+function smooth(lms){
+  // V1.3: deliberately favor responsiveness. Small movements get mild smoothing,
+  // while larger movements almost immediately snap to the latest observation.
+  if(!smoothed){
+    smoothed=lms.slice(0,468).map(p=>({x:p.x,y:p.y,z:p.z||0}));
+    return smoothed;
+  }
+  for(let i=0;i<468;i++){
+    const s=smoothed[i],n=lms[i];
+    const dist=Math.hypot(n.x-s.x,n.y-s.y);
+    const a=Math.max(.58,Math.min(.96,.60+dist*28));
+    s.x+=(n.x-s.x)*a;
+    s.y+=(n.y-s.y)*a;
+    s.z+=(n.z-s.z)*a;
+  }
+  return smoothed;
+}
+function frontalScore(l){
+  const le=l[33],re=l[263],nose=l[1],lc=l[234],rc=l[454];
+  const eyeTilt=Math.abs(re.y-le.y)/Math.max(.001,Math.abs(re.x-le.x));
+  const mid=(lc.x+rc.x)/2,half=Math.max(.001,(rc.x-lc.x)/2);
+  const noseOffset=Math.abs(nose.x-mid)/Math.abs(half);
+  const sideDepth=Math.abs((l[234].z||0)-(l[454].z||0));
+  return eyeTilt*2+noseOffset*1.5+sideDepth*6;
+}
+function copyFrame(){
+  const c=document.createElement("canvas");c.width=video.videoWidth;c.height=video.videoHeight;const x=c.getContext("2d");x.drawImage(video,0,0,c.width,c.height);return c;
+}
+function beginCalibration(){
+  calibrating=true;calCount=0;bestScore=Infinity;bestLandmarks=null;bestFrame=null;reference=null;sourcePoints=null;smoothed=null;
+  tctx.clearRect(0,0,twin.width,twin.height);gctx.clearRect(0,0,guide.width,guide.height);
+  calBadge.textContent="finding frontal frame…";calibrationMessage.classList.remove("hidden");demoBtn.disabled=true;
+  status.textContent="Look straight into the camera. Hold still briefly while I pick the best frontal frame.";
+}
+function calibrationStep(lms){
+  calCount++;const score=frontalScore(lms);
+  if(score<bestScore){bestScore=score;bestLandmarks=lms.slice(0,468).map(p=>({x:p.x,y:p.y,z:p.z||0}));bestFrame=copyFrame()}
+  trackLabel.textContent=`calibrating ${Math.min(calCount,24)}/24`;
+  if(calCount>=24&&bestLandmarks&&bestFrame){reference=bestLandmarks;makeSourcePoints();rebuildGLUV();buildTwin();drawGuide();calibrating=false;calBadge.textContent="digital twin ready";calibrationMessage.classList.add("hidden");demoBtn.disabled=false;status.textContent="Digital twin ready. Paint, stamp or place emojis directly over your real facial features.";if(innerWidth<=900)setMobileView("studio")}
+}
+function makeSourcePoints(){
+  // IMPORTANT: MediaPipe x/y are normalized independently by video width/height.
+  // Convert back to camera-pixel space FIRST so facial proportions are preserved.
+  const vw=video.videoWidth||1, vh=video.videoHeight||1;
+
+  // Mirror in pixel space so the editor matches the selfie preview.
+  const pts=reference.map(p=>({
+    x:vw-(p.x*vw),
+    y:p.y*vh
+  }));
+
+  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+  for(const i of OVAL){
+    const p=pts[i];
+    minX=Math.min(minX,p.x); maxX=Math.max(maxX,p.x);
+    minY=Math.min(minY,p.y); maxY=Math.max(maxY,p.y);
+  }
+
+  const bw=maxX-minX, bh=maxY-minY;
+  minX-=bw*.12; maxX+=bw*.12;
+  minY-=bh*.09; maxY+=bh*.10;
+
+  const boxW=maxX-minX, boxH=maxY-minY;
+  const pad=38;
+  const availW=paint.width-pad*2, availH=paint.height-pad*2;
+  const scale=Math.min(availW/boxW, availH/boxH);
+
+  const usedW=boxW*scale, usedH=boxH*scale;
+  const ox=(paint.width-usedW)/2, oy=(paint.height-usedH)/2;
+
+  sourcePoints=pts.map(p=>({
+    x:ox+(p.x-minX)*scale,
+    y:oy+(p.y-minY)*scale
+  }));
+}
+function buildTwin(){
+  tctx.setTransform(1,0,0,1,0,0);tctx.clearRect(0,0,twin.width,twin.height);
+  const vw=bestFrame.width,vh=bestFrame.height;
+  for(const tri of triangles){
+    const src=tri.map(i=>({x:reference[i].x*vw,y:reference[i].y*vh}));
+    const dst=tri.map(i=>sourcePoints[i]);const m=affine(src,dst);if(!m)continue;
+    tctx.save();tctx.beginPath();tctx.moveTo(dst[0].x,dst[0].y);tctx.lineTo(dst[1].x,dst[1].y);tctx.lineTo(dst[2].x,dst[2].y);tctx.closePath();tctx.clip();tctx.setTransform(...m);tctx.drawImage(bestFrame,0,0);tctx.restore();
+  }
+}
+function featurePath(ids,stroke,width=3,closed=false){
+  gctx.save();gctx.strokeStyle=stroke;gctx.lineWidth=width;gctx.beginPath();ids.forEach((id,k)=>{const p=sourcePoints[id];k?gctx.lineTo(p.x,p.y):gctx.moveTo(p.x,p.y)});if(closed)gctx.closePath();gctx.stroke();gctx.restore();
+}
+function drawGuide(){
+  gctx.clearRect(0,0,guide.width,guide.height);if(!sourcePoints)return;
+  if(showMesh.checked){gctx.save();gctx.strokeStyle="rgba(255,255,255,.12)";gctx.lineWidth=1;for(const tri of triangles){const A=sourcePoints[tri[0]],B=sourcePoints[tri[1]],C=sourcePoints[tri[2]];gctx.beginPath();gctx.moveTo(A.x,A.y);gctx.lineTo(B.x,B.y);gctx.lineTo(C.x,C.y);gctx.closePath();gctx.stroke()}gctx.restore()}
+  if(showFeatures.checked){featurePath(OVAL,"rgba(255,255,255,.56)",3,true);featurePath(LEFT_EYE,"rgba(80,210,255,.78)",3,true);featurePath(RIGHT_EYE,"rgba(80,210,255,.78)",3,true);featurePath(LEFT_BROW,"rgba(255,255,255,.44)",3);featurePath(RIGHT_BROW,"rgba(255,255,255,.44)",3);featurePath(LIPS,"rgba(255,120,170,.82)",3,true)}
+}
+function drawDemo(){
+  if(!sourcePoints)return;snapshot();pctx.clearRect(0,0,paint.width,paint.height);textureDirty=true;pctx.save();pctx.lineCap="round";pctx.lineJoin="round";pctx.globalAlpha=.9;
+  const ring=(ids,col,w)=>{pctx.strokeStyle=col;pctx.lineWidth=w;pctx.beginPath();ids.forEach((id,k)=>{const p=sourcePoints[id];k?pctx.lineTo(p.x,p.y):pctx.moveTo(p.x,p.y)});pctx.closePath();pctx.stroke()};
+  ring(LEFT_EYE,"#7c3aed",34);ring(RIGHT_EYE,"#7c3aed",34);ring(LIPS.slice(0,12),"#ff2d7a",22);
+  pctx.fillStyle="#22d3ee";for(const id of [...LEFT_BROW,...RIGHT_BROW]){const p=sourcePoints[id];pctx.beginPath();pctx.arc(p.x,p.y,10,0,Math.PI*2);pctx.fill()}pctx.restore();textureDirty=true;
+}
+function videoPointToOutput(p){
+  const vw=video.videoWidth||1,vh=video.videoHeight||1,ow=output.width,oh=output.height;
+  const scale=Math.max(ow/vw,oh/vh);
+  const shownW=vw*scale,shownH=vh*scale;
+  const cropX=(shownW-ow)/2,cropY=(shownH-oh)/2;
+
+  // The <video> element is mirrored with CSS (scaleX(-1)).
+  // Mirror the landmark X here so the WebGL overlay uses the same selfie orientation.
+  const mirroredX=1-p.x;
+  return{x:mirroredX*shownW-cropX,y:p.y*shownH-cropY};
+}
+function drawWarp(lms){
+  if(!sourcePoints||!gl)return;
+  const pos=new Float32Array(468*2);
+  for(let i=0;i<468;i++){
+    const q=videoPointToOutput(lms[i]);
+    pos[i*2]=(q.x/output.width)*2-1;
+    pos[i*2+1]=1-(q.y/output.height)*2;
+  }
+  gl.viewport(0,0,output.width,output.height);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.useProgram(glProgram);
+
+  gl.bindBuffer(gl.ARRAY_BUFFER,glPosBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER,pos,gl.DYNAMIC_DRAW);
+  gl.enableVertexAttribArray(glPosLoc);
+  gl.vertexAttribPointer(glPosLoc,2,gl.FLOAT,false,0,0);
+
+  gl.bindBuffer(gl.ARRAY_BUFFER,glUvBuffer);
+  gl.enableVertexAttribArray(glUvLoc);
+  gl.vertexAttribPointer(glUvLoc,2,gl.FLOAT,false,0,0);
+
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,glIndexBuffer);
+  uploadPaintTexture();
+  gl.uniform1f(glAlphaLoc,+maskOpacity.value/100);
+  gl.drawElements(gl.TRIANGLES,glIndexCount,gl.UNSIGNED_SHORT,0);
+}
+async function initTracker(){
+  if(faceLandmarker)return;status.textContent="Loading MediaPipe face tracker…";
+  const vision=await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/wasm");
+  faceLandmarker=await FaceLandmarker.createFromOptions(vision,{baseOptions:{modelAssetPath:"https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",delegate:"GPU"},runningMode:"VIDEO",numFaces:1,minFaceDetectionConfidence:.6,minFacePresenceConfidence:.6,minTrackingConfidence:.55});
+  triangles=buildTriangles();if(triangles.length<300)throw new Error("Could not build face topology.");rebuildGLTopology();
+}
+async function startCamera(){
+  try{cameraBtn.disabled=true;mobileCameraBtn.disabled=true;await initTracker();stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",width:{ideal:640,max:960},height:{ideal:480,max:720},frameRate:{ideal:30,max:30}},audio:false});video.srcObject=stream;await video.play();stageMsg.classList.add("hidden");cameraBtn.textContent="Stop camera";mobileCameraBtn.textContent="Stop";cameraBtn.disabled=false;mobileCameraBtn.disabled=false;cameraBtn.onclick=stopCamera;mobileCameraBtn.onclick=stopCamera;recalibrateBtn.disabled=false;mobileRecalibrateBtn.disabled=false;beginCalibration();if(innerWidth<=900)setMobileView("camera");lastVideoTime=-1;loop()}
+  catch(err){console.error(err);cameraBtn.disabled=false;mobileCameraBtn.disabled=false;status.textContent="Could not start camera.";trackingStatus.textContent=err?.message||String(err)}
+}
+function stopCamera(){
+  cancelAnimationFrame(raf);raf=0;
+  stream?.getTracks().forEach(t=>t.stop());stream=null;video.srcObject=null;clearGL();
+  stageMsg.classList.remove("hidden");
+  cameraBtn.textContent="Start camera";mobileCameraBtn.textContent="Camera";
+  cameraBtn.onclick=startCamera;mobileCameraBtn.onclick=startCamera;
+  recalibrateBtn.disabled=true;mobileRecalibrateBtn.disabled=true;
+  fpsBadge.textContent="camera off";trackDot.classList.remove("live");trackLabel.textContent="idle";
+}
+cameraBtn.onclick=startCamera;mobileCameraBtn.onclick=startCamera;recalibrateBtn.onclick=beginCalibration;mobileRecalibrateBtn.onclick=beginCalibration;
+function loop(){
+  raf=requestAnimationFrame(loop);if(!faceLandmarker||video.readyState<2||video.currentTime===lastVideoTime)return;lastVideoTime=video.currentTime;
+  const now=performance.now(),inferStart=performance.now(),result=faceLandmarker.detectForVideo(video,now),inferMs=performance.now()-inferStart,faces=result.faceLandmarks||[];$("latencyBadge").textContent=`${Math.round(inferMs)} ms detect`;
+  if(faces.length){const lms=smooth(faces[0]);if(calibrating)calibrationStep(faces[0]);drawWarp(lms);trackDot.classList.add("live");if(!calibrating)trackLabel.textContent="face locked";trackingStatus.textContent=calibrating?"Finding the most frontal, least-skewed calibration frame…":"Digital-twin mesh active. Paint is warped across the corresponding live face triangles."}
+  else{clearGL();trackDot.classList.remove("live");trackLabel.textContent="searching";trackingStatus.textContent="Looking for a face…";smoothed=null}
+  const dt=now-lastFrameAt;lastFrameAt=now;if(dt>0)fpsBadge.textContent=Math.min(99,Math.round(1000/dt))+" fps";
+}
+</script>
+</body>
+</html>
