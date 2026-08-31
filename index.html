@@ -4,86 +4,157 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>AR Face Painter</title>
-<style>
-:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#f4f4f5;background:#09090b;color-scheme:dark}
-*{box-sizing:border-box}body{margin:0;background:#09090b;min-height:100vh}button,input{font:inherit}
-.app{width:min(1480px,100%);margin:auto;padding:18px}.top{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:14px}
-h1{font-size:20px;margin:0}.sub,.status{font-size:12px;color:#a1a1aa;line-height:1.5}.actions{display:flex;gap:8px;flex-wrap:wrap}
-button{border:1px solid #3f3f46;background:#27272a;color:#fafafa;border-radius:10px;min-height:42px;padding:0 13px;cursor:pointer}
-button.primary{background:#fafafa;color:#09090b;border-color:#fafafa}button:disabled{opacity:.45;cursor:not-allowed}
-.grid{display:grid;grid-template-columns:minmax(340px,.92fr) minmax(440px,1.08fr);gap:14px}.panel{background:#18181b;border:1px solid #29292f;border-radius:16px;overflow:hidden}
-.head{height:50px;padding:0 15px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #29292f;gap:10px}.head strong{font-size:14px}
-.badge{font-size:11px;padding:4px 7px;border:1px solid #3f3f46;border-radius:999px;color:#d4d4d8;white-space:nowrap}.body{padding:14px}
-.paintWrap{position:relative;width:100%;aspect-ratio:1/1;background:#101014;border:1px solid #303038;border-radius:14px;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
-.paintViewport{position:absolute;inset:0;transform-origin:center center;will-change:transform}
-.paintViewport canvas{position:absolute;inset:0;width:100%;height:100%}.paintWrap canvas{position:absolute;inset:0;width:100%;height:100%}#twin{z-index:1;pointer-events:none}#guide{z-index:2;pointer-events:none}#paint{z-index:3;cursor:crosshair}.zoomBadge{font-size:11px;padding:4px 7px;border:1px solid #3f3f46;border-radius:999px;color:#d4d4d8;white-space:nowrap}
-.calibrationMessage{position:absolute;inset:0;z-index:4;display:grid;place-items:center;text-align:center;padding:30px;background:rgba(10,10,13,.78);color:#d4d4d8;font-size:13px;line-height:1.55;pointer-events:none}
-.calibrationMessage.hidden{display:none}.tools{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}.tool{background:#111114;border:1px solid #29292f;border-radius:11px;padding:10px}
-label{font-size:11px;color:#a1a1aa;display:block;margin-bottom:7px}input[type=range]{width:100%}input[type=color]{width:100%;height:36px;border:0;padding:0;background:transparent}select,input[type=text]{width:100%;min-height:36px;border:1px solid #3f3f46;background:#18181b;color:#fafafa;border-radius:8px;padding:0 10px}
-.stage{position:relative;width:100%;aspect-ratio:4/3;background:#050507;overflow:hidden}#video,#output{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-#video{z-index:1;transform:scaleX(-1)}#output{z-index:2;pointer-events:none;transform:none}.stageMsg{position:absolute;inset:0;z-index:3;display:grid;place-items:center;text-align:center;padding:28px;color:#a1a1aa;background:linear-gradient(180deg,rgba(9,9,11,.2),rgba(9,9,11,.75))}
-.stageMsg.hidden{display:none}.metrics{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.dot{width:8px;height:8px;border-radius:50%;background:#71717a;display:inline-block;margin-right:6px}.dot.live{background:#22c55e}
-.notice{margin-top:10px;padding:10px 12px;border-radius:10px;background:#111114;border:1px solid #29292f;color:#a1a1aa;font-size:12px;line-height:1.45}
-.row{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.switch{display:flex;align-items:center;gap:7px;font-size:11px;color:#a1a1aa}.switch input{width:16px;height:16px}
 
-.mobileNav{display:none}
-.viewTitle{display:none}
+<style>
+:root{
+  font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  color:#f5f5f5;background:#0a0a0b;color-scheme:dark;
+  --bg:#0a0a0b;--panel:#131316;--panel-2:#18181c;--surface:#1d1d22;
+  --border:#2b2b31;--border-strong:#3a3a42;--muted:#9999a3;--text:#f5f5f5;
+  --accent:#f4f4f5;--accent-text:#111113;--danger:#ff6b6b;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);min-height:100%}
+body{min-height:100vh}
+button,input,select{font:inherit}
+button,select,input[type=text]{outline:none}
+button:focus-visible,select:focus-visible,input:focus-visible{box-shadow:0 0 0 3px rgba(255,255,255,.12);border-color:#62626d}
+.app{width:min(1500px,100%);margin:auto;padding:20px}
+.top{display:flex;gap:18px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:16px}
+.brand{display:flex;flex-direction:column;gap:4px}
+h1{font-size:21px;letter-spacing:-.02em;margin:0;font-weight:720}
+.sub,.status{font-size:12px;color:var(--muted);line-height:1.5}
+.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button{
+  border:1px solid var(--border-strong);background:#202025;color:#f7f7f8;border-radius:10px;
+  min-height:40px;padding:0 13px;cursor:pointer;font-weight:600;font-size:12px;
+  transition:background .15s,border-color .15s,transform .1s
+}
+@media(hover:hover){button:hover:not(:disabled){background:#29292f;border-color:#4d4d57}}
+button:active:not(:disabled){transform:translateY(1px)}
+button.primary{background:var(--accent);color:var(--accent-text);border-color:var(--accent)}
+button.ghost{background:transparent}
+button.danger{color:#ffb0b0;border-color:#56363a;background:#251719}
+button:disabled{opacity:.42;cursor:not-allowed}
+.grid{display:grid;grid-template-columns:minmax(390px,.93fr) minmax(460px,1.07fr);gap:16px}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:18px;overflow:hidden}
+.head{min-height:54px;padding:0 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);gap:12px}
+.head strong{font-size:13px;font-weight:700;letter-spacing:.01em}
+.badge,.zoomBadge{font-size:10px;padding:5px 8px;border:1px solid var(--border-strong);border-radius:999px;color:#ccccd2;white-space:nowrap;background:#161619}
+.body{padding:14px}
+.paintWrap{position:relative;width:100%;aspect-ratio:1/1;background:#0c0c0e;border:1px solid var(--border);border-radius:14px;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.paintViewport{position:absolute;inset:0;transform-origin:center center;will-change:transform}
+.paintViewport canvas,.paintWrap canvas{position:absolute;inset:0;width:100%;height:100%}
+#twin{z-index:1;pointer-events:none}#guide{z-index:2;pointer-events:none}#paint{z-index:3;cursor:crosshair}
+.calibrationMessage{position:absolute;inset:0;z-index:4;display:grid;place-items:center;text-align:center;padding:34px;background:rgba(8,8,10,.82);color:#d2d2d7;font-size:13px;line-height:1.55;pointer-events:none}
+.calibrationMessage.hidden{display:none}
+
+/* Studio toolbar */
+.studioToolbar{
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:12px 0 0;
+  padding:7px;background:#101012;border:1px solid var(--border);border-radius:12px
+}
+.toolMode{
+  min-height:42px;background:transparent;border-color:transparent;color:#aaaab3;
+  display:flex;align-items:center;justify-content:center;gap:7px;padding:0 8px
+}
+.toolMode.active{background:#f2f2f3;color:#111114;border-color:#f2f2f3}
+.toolMode .toolIcon{font-size:14px;line-height:1}
+.toolbarSecondary{display:flex;gap:7px;margin-top:8px;flex-wrap:wrap}
+.toolbarSecondary button{flex:1;min-width:82px;background:#17171a}
+
+/* Controls */
+.controlStack{display:grid;gap:10px;margin-top:12px}
+.controlSection{border:1px solid var(--border);background:#101012;border-radius:13px;overflow:hidden}
+.controlSectionHead{
+  min-height:40px;padding:0 12px;display:flex;align-items:center;justify-content:space-between;
+  border-bottom:1px solid #25252a
+}
+.controlSectionHead strong{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#c8c8cf}
+.controlSectionHead span{font-size:10px;color:#777781}
+.controlGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0}
+.control{
+  padding:11px 12px;border-right:1px solid #242429;border-bottom:1px solid #242429;min-width:0
+}
+.control:nth-child(2n){border-right:0}
+.controlGrid .control:nth-last-child(-n+2){border-bottom:0}
+.control.full{grid-column:1/-1;border-right:0}
+.controlLabel{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:10px;color:#94949e;margin-bottom:8px;font-weight:650}
+.controlValue{color:#d7d7dc;font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:#e4e4e7}
+.colorRow{display:flex;align-items:center;gap:10px}
+input[type=color]{width:42px;height:34px;border:1px solid var(--border-strong);border-radius:9px;padding:3px;background:#151518}
+.colorHex{font-size:11px;color:#b4b4bc;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+select,input[type=text]{
+  width:100%;min-height:36px;border:1px solid var(--border-strong);background:#19191d;color:#f5f5f6;
+  border-radius:9px;padding:0 10px;font-size:12px
+}
+.templateActions{display:grid;grid-template-columns:1fr auto;gap:7px}
+.templateActions button{min-height:36px}
+.switchRow{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.switch{display:flex;align-items:center;gap:7px;font-size:11px;color:#b2b2ba;margin:0}
+.switch input{width:16px;height:16px;accent-color:#f4f4f5}
+
+.notice{margin-top:10px;padding:10px 12px;border-radius:10px;background:#0e0e10;border:1px solid #242429;color:#8f8f99;font-size:11px;line-height:1.5}
+.metrics{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+.dot{width:7px;height:7px;border-radius:50%;background:#66666e;display:inline-block;margin-right:5px}.dot.live{background:#43d17c}
+.stage{position:relative;width:100%;aspect-ratio:4/3;background:#050506;overflow:hidden}
+#video,#output{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+#video{z-index:1;transform:scaleX(-1)}#output{z-index:2;pointer-events:none;transform:none}
+.stageMsg{position:absolute;inset:0;z-index:3;display:grid;place-items:center;text-align:center;padding:28px;color:#9999a2;background:linear-gradient(180deg,rgba(8,8,10,.2),rgba(8,8,10,.8))}
+.stageMsg.hidden{display:none}
+.mobileNav{display:none}.viewTitle{display:none}
+
 @media(max-width:900px){
   body{overflow:hidden}
   .app{padding:0;width:100%;height:100vh;max-width:none;display:flex;flex-direction:column}
-  .top{display:none}
-  .grid{display:block;flex:1;min-height:0}
-  .panel{border:0;border-radius:0;height:100%;background:#09090b}
-  .panel .head{height:48px;background:#111114;position:relative;z-index:5}
-  .panel .body{padding:12px}
-  .studioPanel,.cameraPanel{display:none}
-  .studioPanel.active,.cameraPanel.active{display:block}
-  .studioPanel{height:100%;overflow-y:auto;padding-bottom:82px}
-  .cameraPanel{height:100%;position:relative;padding-bottom:68px}
-  .cameraPanel .body{position:absolute;left:0;right:0;bottom:68px;z-index:4;background:linear-gradient(180deg,transparent,rgba(9,9,11,.88));padding:18px 14px 12px}
-  .stage{position:absolute;inset:48px 0 68px 0;width:auto;height:auto;aspect-ratio:auto;background:#000}
-  #video,#output{width:100%;height:100%;object-fit:cover}
-  .paintWrap{width:min(100%,620px);margin:0 auto}
-  .tools{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .actions{justify-content:center}
-  .mobileNav{
-    position:fixed;left:0;right:0;bottom:0;z-index:50;
-    display:grid;grid-template-columns:1fr 1fr;gap:8px;
-    padding:8px 10px calc(8px + env(safe-area-inset-bottom));
-    background:rgba(17,17,20,.96);border-top:1px solid #29292f;
-    backdrop-filter:blur(12px)
-  }
-  .mobileNav button{min-height:48px;font-weight:600}
-  .mobileNav button.active{background:#fafafa;color:#09090b;border-color:#fafafa}
-  .viewTitle{display:block;font-size:13px;color:#d4d4d8}
-  .cameraControls{
-    position:absolute;right:12px;top:60px;z-index:5;display:flex;flex-direction:column;gap:8px
-  }
-  .cameraControls button{min-width:46px;padding:0 10px;background:rgba(24,24,27,.86);backdrop-filter:blur(8px)}
-}
-@media(max-width:520px){
+  .top{display:none}.grid{display:block;flex:1;min-height:0}
+  .panel{border:0;border-radius:0;height:100%;background:var(--bg)}
+  .panel .head{height:50px;background:#111114;position:relative;z-index:5}
   .panel .body{padding:10px}
-  .tools{grid-template-columns:1fr 1fr}
-  .tool{padding:9px}
-  .notice{font-size:11px}
-  .paintWrap{border-radius:0;border-left:0;border-right:0}
+  .studioPanel,.cameraPanel{display:none}.studioPanel.active,.cameraPanel.active{display:block}
+  .studioPanel{height:100%;overflow-y:auto;padding-bottom:86px}
+  .cameraPanel{height:100%;position:relative;padding-bottom:68px}
+  .cameraPanel .body{position:absolute;left:0;right:0;bottom:68px;z-index:4;background:linear-gradient(180deg,transparent,rgba(9,9,11,.9));padding:18px 14px 12px}
+  .stage{position:absolute;inset:50px 0 68px 0;width:auto;height:auto;aspect-ratio:auto;background:#000}
+  .paintWrap{width:min(100%,620px);margin:0 auto}
+  .studioToolbar{position:sticky;top:0;z-index:8;background:rgba(16,16,18,.96);backdrop-filter:blur(10px)}
+  .controlStack{gap:8px}
+  .actions{justify-content:center}
+  .mobileNav{position:fixed;left:0;right:0;bottom:0;z-index:50;display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:8px 10px calc(8px + env(safe-area-inset-bottom));background:rgba(17,17,20,.96);border-top:1px solid var(--border);backdrop-filter:blur(12px)}
+  .mobileNav button{min-height:48px;font-weight:700}.mobileNav button.active{background:#f5f5f5;color:#111113;border-color:#f5f5f5}
+  .viewTitle{display:block;font-size:13px;color:#d4d4d8}
+  .cameraControls{position:absolute;right:12px;top:62px;z-index:5;display:flex;flex-direction:column;gap:8px}
+  .cameraControls button{min-width:46px;padding:0 10px;background:rgba(24,24,27,.88);backdrop-filter:blur(8px)}
 }
-
+@media(max-width:560px){
+  .panel .body{padding:8px}
+  .paintWrap{border-radius:10px}
+  .studioToolbar{grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;padding:5px}
+  .toolMode{min-height:40px;font-size:11px;padding:0 4px}
+  .toolMode .toolIcon{display:none}
+  .controlGrid{grid-template-columns:1fr}
+  .control,.control:nth-child(2n),.controlGrid .control:nth-last-child(-n+2){border-right:0;border-bottom:1px solid #242429}
+  .controlGrid .control:last-child{border-bottom:0}
+  .control.full{grid-column:auto}
+  .notice{font-size:10px}
+}
 </style>
+
 </head>
 <body>
 <main class="app">
 <div class="top">
-  <div>
+  <div class="brand">
     <h1>AR Face Painter</h1>
-    <div class="sub" id="status">V1.5.3 fixes pinch-to-zoom on iPhone Safari using native two-touch gestures on the stable studio wrapper.</div>
+    <div class="sub" id="status">Create a mask on your digital twin, then preview it live in AR.</div>
   </div>
   <div class="actions"><button id="recalibrateBtn" disabled>Rebuild digital twin</button><button class="primary" id="cameraBtn">Start camera</button></div>
 </div>
 
 <section class="grid">
 <article class="panel studioPanel active" id="studioView">
-  <div class="head"><strong>Digital-twin painter</strong><div class="metrics"><span class="zoomBadge" id="zoomBadge">100%</span><span class="badge" id="calBadge">not calibrated</span></div></div>
+  <div class="head"><strong>Mask Studio</strong><div class="metrics"><span class="zoomBadge" id="zoomBadge">100%</span><span class="badge" id="calBadge">not calibrated</span></div></div>
   <div class="body">
     <div class="paintWrap" id="paintWrap">
       <div class="paintViewport" id="paintViewport">
@@ -91,47 +162,109 @@ label{font-size:11px;color:#a1a1aa;display:block;margin-bottom:7px}input[type=ra
         <canvas id="guide" width="896" height="896"></canvas>
         <canvas id="paint" width="896" height="896" aria-label="Face painting canvas"></canvas>
       </div>
-      <div class="calibrationMessage" id="calibrationMessage">Start the camera and look directly toward it.<br><br>V1.2 will choose the best frontal frame and flatten your real face into this editor.</div>
+      <div class="calibrationMessage" id="calibrationMessage">Start the camera and look directly toward it.<br><br>The app will capture a clean frontal frame and build your digital twin.</div>
     </div>
 
-    <div class="tools">
-      <div class="tool"><label for="color">Brush colour</label><input id="color" type="color" value="#ff2d7a"></div>
-      <div class="tool"><label for="size">Brush size <span id="sizeOut">25</span>px</label><input id="size" type="range" min="3" max="100" value="25"></div>
-      <div class="tool"><label for="opacity">Brush opacity <span id="opacityOut">90</span>%</label><input id="opacity" type="range" min="5" max="100" value="90"></div>
-      <div class="tool"><label for="maskOpacity">AR opacity <span id="maskOpacityOut">90</span>%</label><input id="maskOpacity" type="range" min="10" max="100" value="90"></div>
-      <div class="tool"><label for="twinOpacity">Twin visibility <span id="twinOpacityOut">75</span>%</label><input id="twinOpacity" type="range" min="0" max="100" value="75"></div>
-      <div class="tool"><label for="stampType">Stamp shape</label><select id="stampType"><option value="star">Star</option><option value="heart">Heart</option><option value="sparkle">Sparkle</option><option value="flower">Flower</option><option value="lightning">Lightning</option><option value="diamond">Diamond</option></select></div>
-      <div class="tool"><label for="emojiSelect">Emoji preset</label><select id="emojiSelect"><option>✨</option><option>⭐</option><option>🔥</option><option>❤️</option><option>🦋</option><option>🌈</option><option>⚡</option><option>❄️</option><option>🎭</option><option>👑</option></select></div>
-      <div class="tool"><label for="emojiInput">Custom emoji (optional)</label><input id="emojiInput" type="text" placeholder="e.g. 😎 or 🐯"></div>
-      <div class="tool"><label for="stampRotation">Stamp rotation <span id="stampRotationOut">0</span>°</label><input id="stampRotation" type="range" min="0" max="360" value="0"></div>
-      <div class="tool"><label for="animalMaskSelect">Animal mask template</label><select id="animalMaskSelect"><option value="cat">Cat</option><option value="tiger">Tiger</option><option value="panda">Panda</option><option value="fox">Fox</option><option value="rabbit">Rabbit</option></select></div>
-      <div class="tool">
-        <label>Template actions</label>
-        <div class="row">
-          <button id="applyAnimalBtn">Load template</button>
-          <button id="randomAnimalBtn">Random</button>
-        </div>
-      </div>
-      <div class="tool">
-        <label>Editor overlays</label>
-        <div class="row">
-          <label class="switch"><input id="showMesh" type="checkbox"> mesh</label>
-          <label class="switch"><input id="showFeatures" type="checkbox" checked> features</label>
-        </div>
-      </div>
+    <div class="studioToolbar" aria-label="Drawing tools">
+      <button class="toolMode active" id="brushBtn"><span class="toolIcon">✦</span>Brush</button>
+      <button class="toolMode" id="eraserBtn"><span class="toolIcon">◇</span>Eraser</button>
+      <button class="toolMode" id="stampBtn"><span class="toolIcon">★</span>Stamp</button>
+      <button class="toolMode" id="emojiBtn"><span class="toolIcon">☺</span>Emoji</button>
+    </div>
+    <div class="toolbarSecondary">
+      <button id="undoBtn">Undo</button>
+      <button id="resetZoomBtn">Reset view</button>
+      <button id="demoBtn" disabled>Demo design</button>
+      <button class="danger" id="clearBtn">Clear mask</button>
     </div>
 
-    <div class="actions" style="margin-top:11px">
-      <button id="brushBtn">Brush</button><button id="eraserBtn">Eraser</button><button id="stampBtn">Stamp</button><button id="emojiBtn">Emoji</button><button id="undoBtn">Undo</button><button id="clearBtn">Clear</button><button id="resetZoomBtn">Reset zoom</button><button id="demoBtn" disabled>Feature demo</button>
+    <div class="controlStack">
+      <section class="controlSection">
+        <div class="controlSectionHead"><strong>Paint</strong><span>Brush & eraser</span></div>
+        <div class="controlGrid">
+          <div class="control">
+            <div class="controlLabel"><span>Colour</span><span class="colorHex" id="colorHex">#FF2D7A</span></div>
+            <div class="colorRow"><input id="color" type="color" value="#ff2d7a"><span class="colorHex">Tap swatch to change</span></div>
+          </div>
+          <div class="control">
+            <div class="controlLabel"><span>Size</span><span class="controlValue"><span id="sizeOut">25</span> px</span></div>
+            <input id="size" type="range" min="3" max="100" value="25">
+          </div>
+          <div class="control full">
+            <div class="controlLabel"><span>Opacity</span><span class="controlValue"><span id="opacityOut">90</span>%</span></div>
+            <input id="opacity" type="range" min="5" max="100" value="90">
+          </div>
+        </div>
+      </section>
+
+      <section class="controlSection">
+        <div class="controlSectionHead"><strong>Stickers</strong><span>Shapes & emoji</span></div>
+        <div class="controlGrid">
+          <div class="control">
+            <div class="controlLabel"><span>Stamp shape</span></div>
+            <select id="stampType"><option value="star">Star</option><option value="heart">Heart</option><option value="sparkle">Sparkle</option><option value="flower">Flower</option><option value="lightning">Lightning</option><option value="diamond">Diamond</option></select>
+          </div>
+          <div class="control">
+            <div class="controlLabel"><span>Rotation</span><span class="controlValue"><span id="stampRotationOut">0</span>°</span></div>
+            <input id="stampRotation" type="range" min="0" max="360" value="0">
+          </div>
+          <div class="control">
+            <div class="controlLabel"><span>Emoji preset</span></div>
+            <select id="emojiSelect"><option>✨</option><option>⭐</option><option>🔥</option><option>❤️</option><option>🦋</option><option>🌈</option><option>⚡</option><option>❄️</option><option>🎭</option><option>👑</option></select>
+          </div>
+          <div class="control">
+            <div class="controlLabel"><span>Custom emoji</span></div>
+            <input id="emojiInput" type="text" placeholder="e.g. 😎 or 🐯">
+          </div>
+        </div>
+      </section>
+
+      <section class="controlSection">
+        <div class="controlSectionHead"><strong>Templates</strong><span>Start from a design</span></div>
+        <div class="controlGrid">
+          <div class="control full">
+            <div class="controlLabel"><span>Animal mask</span></div>
+            <div class="templateActions">
+              <select id="animalMaskSelect"><option value="cat">Cat</option><option value="tiger">Tiger</option><option value="panda">Panda</option><option value="fox">Fox</option><option value="rabbit">Rabbit</option></select>
+              <button id="applyAnimalBtn">Apply</button>
+            </div>
+          </div>
+          <div class="control full">
+            <button class="ghost" id="randomAnimalBtn" style="width:100%">Surprise me with a random animal mask</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="controlSection">
+        <div class="controlSectionHead"><strong>View & AR</strong><span>Preview controls</span></div>
+        <div class="controlGrid">
+          <div class="control">
+            <div class="controlLabel"><span>AR opacity</span><span class="controlValue"><span id="maskOpacityOut">90</span>%</span></div>
+            <input id="maskOpacity" type="range" min="10" max="100" value="90">
+          </div>
+          <div class="control">
+            <div class="controlLabel"><span>Twin visibility</span><span class="controlValue"><span id="twinOpacityOut">75</span>%</span></div>
+            <input id="twinOpacity" type="range" min="0" max="100" value="75">
+          </div>
+          <div class="control full">
+            <div class="controlLabel"><span>Editor guides</span></div>
+            <div class="switchRow">
+              <label class="switch"><input id="showMesh" type="checkbox"> Mesh</label>
+              <label class="switch"><input id="showFeatures" type="checkbox" checked> Face features</label>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
-    <div class="notice">V1.6.2 adds a synthetic <b>extended forehead mesh</b> above MediaPipe’s normal face boundary. Paint above the yellow dashed line area to cover much higher on the forehead.</div>
+
+    <div class="notice">Tip: use one finger to paint and two fingers to pinch and pan. Switch to Camera AR at any time to preview the mask live.</div>
   </div>
 </article>
 
 <article class="panel cameraPanel" id="cameraView">
   <div class="head"><strong>Live AR preview</strong><div class="metrics"><span class="badge" id="fpsBadge">camera off</span><span class="badge" id="latencyBadge">worker idle</span><span class="badge" id="perfBadge">worker loading</span><span class="badge"><span class="dot" id="trackDot"></span><span id="trackLabel">idle</span></span></div></div>
   <div class="cameraControls"><button id="mobileCameraBtn" title="Start or stop camera">Camera</button><button id="mobileRecalibrateBtn" title="Rebuild digital twin" disabled>Calibrate</button></div><div class="stage" id="stage"><video id="video" autoplay playsinline muted></video><canvas id="output"></canvas><div class="stageMsg" id="stageMsg">Start webcam to build your digital twin.</div></div>
-  <div class="body"><div class="status" id="trackingStatus">V1.4 supports brush painting plus stamps and emoji stickers, all projected through the same low-latency GPU face mesh.</div></div>
+  <div class="body"><div class="status" id="trackingStatus">Start the camera to preview your mask live on the tracked 3D face.</div></div>
 </article>
 </section>
 <nav class="mobileNav" aria-label="App views">
@@ -435,14 +568,21 @@ paintWrap.addEventListener("touchend",e=>{
 },{passive:false});
 paintWrap.addEventListener("touchcancel",()=>{pinchState=null},{passive:false});
 
-size.oninput=()=>$("sizeOut").textContent=size.value;opacity.oninput=()=>$("opacityOut").textContent=opacity.value;maskOpacity.oninput=()=>$("maskOpacityOut").textContent=maskOpacity.value;
+color.oninput=()=>{$("colorHex").textContent=color.value.toUpperCase()};size.oninput=()=>$("sizeOut").textContent=size.value;opacity.oninput=()=>$("opacityOut").textContent=opacity.value;maskOpacity.oninput=()=>$("maskOpacityOut").textContent=maskOpacity.value;
 twinOpacity.oninput=()=>{twin.style.opacity=(+twinOpacity.value/100).toString();$("twinOpacityOut").textContent=twinOpacity.value};
 stampRotation.oninput=()=>$("stampRotationOut").textContent=stampRotation.value;
 showMesh.onchange=drawGuide;showFeatures.onchange=drawGuide;
-$("brushBtn").onclick=()=>{mode="brush";status.textContent="Brush selected."};
-$("eraserBtn").onclick=()=>{mode="eraser";status.textContent="Eraser selected."};
-$("stampBtn").onclick=()=>{mode="stamp";status.textContent="Stamp mode selected. Click the twin to place a shape."};
-$("emojiBtn").onclick=()=>{mode="emoji";status.textContent="Emoji mode selected. Click the twin to place an emoji."};
+function setToolMode(next,label){
+  mode=next;
+  for(const id of ["brushBtn","eraserBtn","stampBtn","emojiBtn"])$(id).classList.remove("active");
+  const activeId={brush:"brushBtn",eraser:"eraserBtn",stamp:"stampBtn",emoji:"emojiBtn"}[next];
+  if(activeId)$(activeId).classList.add("active");
+  status.textContent=label;
+}
+$("brushBtn").onclick=()=>setToolMode("brush","Brush selected.");
+$("eraserBtn").onclick=()=>setToolMode("eraser","Eraser selected.");
+$("stampBtn").onclick=()=>setToolMode("stamp","Stamp selected. Tap the face to place a shape.");
+$("emojiBtn").onclick=()=>setToolMode("emoji","Emoji selected. Tap the face to place an emoji.");
 $("undoBtn").onclick=()=>{const x=history.pop();if(x){pctx.putImageData(x,0,0);textureDirty=true}};
 $("clearBtn").onclick=()=>{snapshot();pctx.clearRect(0,0,paint.width,paint.height);textureDirty=true};
 applyAnimalBtn.onclick=()=>applyAnimalMask(animalMaskSelect.value);
@@ -670,7 +810,7 @@ function calibrationStep(lms){
   calCount++;const score=frontalScore(lms);
   if(score<bestScore){bestScore=score;bestLandmarks=lms.slice(0,468).map(p=>({x:p.x,y:p.y,z:p.z||0}));bestFrame=copyFrame()}
   trackLabel.textContent=`calibrating ${Math.min(calCount,24)}/24`;
-  if(calCount>=24&&bestLandmarks&&bestFrame){reference=bestLandmarks;referencePoseMatrix=currentPoseMatrix?currentPoseMatrix.slice():null;referenceBlendshapes={...currentBlendshapes};makeSourcePoints();buildExtendedSourcePoints();rebuildGLUV();buildTwin();drawGuide();calibrating=false;calBadge.textContent="digital twin ready";calibrationMessage.classList.add("hidden");demoBtn.disabled=false;status.textContent="Digital twin ready. Paint, stamp, place emojis, or load a pre-drawn animal mask template.";if(innerWidth<=900)setMobileView("studio")}
+  if(calCount>=24&&bestLandmarks&&bestFrame){reference=bestLandmarks;referencePoseMatrix=currentPoseMatrix?currentPoseMatrix.slice():null;referenceBlendshapes={...currentBlendshapes};makeSourcePoints();buildExtendedSourcePoints();rebuildGLUV();buildTwin();drawGuide();calibrating=false;calBadge.textContent="digital twin ready";calibrationMessage.classList.add("hidden");demoBtn.disabled=false;status.textContent="Digital twin ready. Design your mask, then preview it live in Camera AR.";if(innerWidth<=900)setMobileView("studio")}
 }
 function makeSourcePoints(){
   // IMPORTANT: MediaPipe x/y are normalized independently by video width/height.
