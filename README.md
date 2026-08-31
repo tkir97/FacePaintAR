@@ -1,25 +1,20 @@
-# AR Face Painter V1.5.2 — Pinch Zoom
+# AR Face Painter V1.5.3 — iOS Pinch Fix
 
-This version adds mobile-friendly navigation inside the Mask Studio.
+This fixes pinch-to-zoom on iPhone Safari.
 
-## New
+## What changed
 
-- Pinch to zoom the digital twin and mask drawing canvas
-- Two-finger pan while zoomed
-- Reset zoom button
-- Live zoom percentage badge
+The previous build handled pinch using Pointer Events directly on the transformed paint canvas. Safari can lose or confuse pointer tracking while that element is being transformed.
 
-## Notes
+V1.5.3 instead:
+- listens for native `touchstart` / `touchmove` on the stable outer paint wrapper
+- reserves two-finger touches for zoom + pan
+- leaves single-finger Pointer Events for drawing, stamps and emojis
+- prevents Safari page zoom/callout inside the studio canvas
 
-- Single finger still draws / erases
-- Stamp and emoji modes still place items with a tap
-- Two-finger gestures are reserved for zooming and panning
-- The zoom transform affects the studio view only, not the underlying face geometry or exported paint
+## Controls
 
-## Run
+- 1 finger: draw / erase / place stamp / place emoji
+- 2 fingers: pinch to zoom + pan
+- Reset zoom: restore 100%
 
-```bash
-python3 -m http.server 8080
-```
-
-For iPhone testing, use HTTPS or localhost.

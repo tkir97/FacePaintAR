@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AR Face Painter v1.5.2</title>
+<title>AR Face Painter v1.5.3</title>
 <style>
 :root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#f4f4f5;background:#09090b;color-scheme:dark}
 *{box-sizing:border-box}body{margin:0;background:#09090b;min-height:100vh}button,input{font:inherit}
@@ -14,7 +14,7 @@ button.primary{background:#fafafa;color:#09090b;border-color:#fafafa}button:disa
 .grid{display:grid;grid-template-columns:minmax(340px,.92fr) minmax(440px,1.08fr);gap:14px}.panel{background:#18181b;border:1px solid #29292f;border-radius:16px;overflow:hidden}
 .head{height:50px;padding:0 15px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #29292f;gap:10px}.head strong{font-size:14px}
 .badge{font-size:11px;padding:4px 7px;border:1px solid #3f3f46;border-radius:999px;color:#d4d4d8;white-space:nowrap}.body{padding:14px}
-.paintWrap{position:relative;width:100%;aspect-ratio:1/1;background:#101014;border:1px solid #303038;border-radius:14px;overflow:hidden;touch-action:none}
+.paintWrap{position:relative;width:100%;aspect-ratio:1/1;background:#101014;border:1px solid #303038;border-radius:14px;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 .paintViewport{position:absolute;inset:0;transform-origin:center center;will-change:transform}
 .paintViewport canvas{position:absolute;inset:0;width:100%;height:100%}.paintWrap canvas{position:absolute;inset:0;width:100%;height:100%}#twin{z-index:1;pointer-events:none}#guide{z-index:2;pointer-events:none}#paint{z-index:3;cursor:crosshair}.zoomBadge{font-size:11px;padding:4px 7px;border:1px solid #3f3f46;border-radius:999px;color:#d4d4d8;white-space:nowrap}
 .calibrationMessage{position:absolute;inset:0;z-index:4;display:grid;place-items:center;text-align:center;padding:30px;background:rgba(10,10,13,.78);color:#d4d4d8;font-size:13px;line-height:1.55;pointer-events:none}
@@ -75,8 +75,8 @@ label{font-size:11px;color:#a1a1aa;display:block;margin-bottom:7px}input[type=ra
 <main class="app">
 <div class="top">
   <div>
-    <h1>AR Face Painter <span class="badge">V1.5.2 pinch zoom</span></h1>
-    <div class="sub" id="status">V1.5.2 adds pinch-to-zoom and two-finger pan in the Mask Studio.</div>
+    <h1>AR Face Painter <span class="badge">V1.5.3 iOS pinch fix</span></h1>
+    <div class="sub" id="status">V1.5.3 fixes pinch-to-zoom on iPhone Safari using native two-touch gestures on the stable studio wrapper.</div>
   </div>
   <div class="actions"><button id="recalibrateBtn" disabled>Rebuild digital twin</button><button class="primary" id="cameraBtn">Start camera</button></div>
 </div>
@@ -153,7 +153,6 @@ let lastDetectAt=0,lastTracked=null,prevTracked=null,lastTrackedAt=0,prevTracked
 let mode="brush",drawing=false,lastPoint=null,history=[];
 let studioScale=1,studioPanX=0,studioPanY=0;
 const MIN_STUDIO_SCALE=1,MAX_STUDIO_SCALE=4;
-const activePointers=new Map();
 let pinchState=null;
 
 const OVAL=[10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109];
@@ -193,29 +192,26 @@ function point(e){
   const r=paint.getBoundingClientRect();
   return{x:(e.clientX-r.left)*paint.width/r.width,y:(e.clientY-r.top)*paint.height/r.height}
 }
-function pointerInfo(e){return{x:e.clientX,y:e.clientY}}
-function pointerDistance(a,b){return Math.hypot(b.x-a.x,b.y-a.y)}
-function pointerCenter(a,b){return{x:(a.x+b.x)/2,y:(a.y+b.y)/2}}
-function beginPinch(){
-  const pts=[...activePointers.values()];
-  if(pts.length<2)return;
-  const [a,b]=pts;
+function touchDistance(a,b){return Math.hypot(b.clientX-a.clientX,b.clientY-a.clientY)}
+function touchCenter(a,b){return{x:(a.clientX+b.clientX)/2,y:(a.clientY+b.clientY)/2}}
+function beginTouchPinch(touches){
+  if(touches.length<2)return;
+  const a=touches[0],b=touches[1];
   pinchState={
     startScale:studioScale,
     startPanX:studioPanX,
     startPanY:studioPanY,
-    startDistance:Math.max(1,pointerDistance(a,b)),
-    startCenter:pointerCenter(a,b)
+    startDistance:Math.max(1,touchDistance(a,b)),
+    startCenter:touchCenter(a,b)
   };
   drawing=false;
   lastPoint=null;
 }
-function updatePinch(){
-  if(activePointers.size<2||!pinchState)return;
-  const pts=[...activePointers.values()];
-  const [a,b]=pts;
-  const dist=Math.max(1,pointerDistance(a,b));
-  const center=pointerCenter(a,b);
+function updateTouchPinch(touches){
+  if(touches.length<2||!pinchState)return;
+  const a=touches[0],b=touches[1];
+  const dist=Math.max(1,touchDistance(a,b));
+  const center=touchCenter(a,b);
   studioScale=clamp(pinchState.startScale*(dist/pinchState.startDistance),MIN_STUDIO_SCALE,MAX_STUDIO_SCALE);
   studioPanX=pinchState.startPanX+(center.x-pinchState.startCenter.x);
   studioPanY=pinchState.startPanY+(center.y-pinchState.startCenter.y);
@@ -223,12 +219,8 @@ function updatePinch(){
 }
 paint.addEventListener("pointerdown",e=>{
   if(!reference)return;
-  activePointers.set(e.pointerId,pointerInfo(e));
-  if(activePointers.size>=2){
-    e.preventDefault();
-    beginPinch();
-    return;
-  }
+  // On touch devices, a second finger is handled by native touch events on paintWrap.
+  if(e.pointerType==="touch" && pinchState)return;
   e.preventDefault();
   const pt=point(e);
   if(mode==="stamp"){
@@ -247,24 +239,35 @@ paint.addEventListener("pointerdown",e=>{
   paint.setPointerCapture?.(e.pointerId);
 });
 paint.addEventListener("pointermove",e=>{
-  if(activePointers.has(e.pointerId))activePointers.set(e.pointerId,pointerInfo(e));
-  if(activePointers.size>=2){
-    e.preventDefault();
-    updatePinch();
-    return;
-  }
-  if(!drawing)return;
+  if(!drawing||pinchState)return;
   e.preventDefault();
   const q=point(e);
   pctx.save();pctx.lineCap="round";pctx.lineJoin="round";pctx.lineWidth=+size.value;pctx.globalAlpha=+opacity.value/100;pctx.globalCompositeOperation=mode==="eraser"?"destination-out":"source-over";pctx.strokeStyle=color.value;pctx.beginPath();pctx.moveTo(lastPoint.x,lastPoint.y);pctx.lineTo(q.x,q.y);pctx.stroke();pctx.restore();textureDirty=true;lastPoint=q
 });
 function endDraw(e){
-  activePointers.delete(e.pointerId);
-  if(activePointers.size<2)pinchState=null;
   drawing=false;lastPoint=null;
   try{paint.releasePointerCapture?.(e.pointerId)}catch{}
 }
 paint.addEventListener("pointerup",endDraw);paint.addEventListener("pointercancel",endDraw);paint.addEventListener("pointerleave",endDraw);
+
+// Native touch gestures are more reliable than transformed Pointer Events in iOS Safari.
+paintWrap.addEventListener("touchstart",e=>{
+  if(e.touches.length>=2){
+    e.preventDefault();
+    beginTouchPinch(e.touches);
+  }
+},{passive:false});
+paintWrap.addEventListener("touchmove",e=>{
+  if(e.touches.length>=2){
+    e.preventDefault();
+    if(!pinchState)beginTouchPinch(e.touches);
+    updateTouchPinch(e.touches);
+  }
+},{passive:false});
+paintWrap.addEventListener("touchend",e=>{
+  if(e.touches.length<2)pinchState=null;
+},{passive:false});
+paintWrap.addEventListener("touchcancel",()=>{pinchState=null},{passive:false});
 
 size.oninput=()=>$("sizeOut").textContent=size.value;opacity.oninput=()=>$("opacityOut").textContent=opacity.value;maskOpacity.oninput=()=>$("maskOpacityOut").textContent=maskOpacity.value;
 twinOpacity.oninput=()=>{twin.style.opacity=(+twinOpacity.value/100).toString();$("twinOpacityOut").textContent=twinOpacity.value};
