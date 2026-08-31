@@ -99,7 +99,7 @@ select,input[type=text]{
 .metrics{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
 .dot{width:7px;height:7px;border-radius:50%;background:#66666e;display:inline-block;margin-right:5px}.dot.live{background:#43d17c}
 .stage{position:relative;width:100%;aspect-ratio:4/3;background:#050506;overflow:hidden}
-#video,#output{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+#video,#output{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;image-rendering:auto;-webkit-transform:translateZ(0)}
 #video{z-index:1;transform:scaleX(-1)}#output{z-index:2;pointer-events:none;transform:none}
 .stageMsg{position:absolute;inset:0;z-index:3;display:grid;place-items:center;text-align:center;padding:28px;color:#9999a2;background:linear-gradient(180deg,rgba(8,8,10,.2),rgba(8,8,10,.8))}
 .stageMsg.hidden{display:none}
@@ -286,7 +286,7 @@ select,input[type=text]{
 </article>
 
 <article class="panel cameraPanel" id="cameraView">
-  <div class="head"><strong>Live AR preview</strong><div class="metrics"><span class="badge" id="fpsBadge">camera off</span><span class="badge" id="latencyBadge">worker idle</span><span class="badge" id="perfBadge">worker loading</span><span class="badge"><span class="dot" id="trackDot"></span><span id="trackLabel">idle</span></span></div></div>
+  <div class="head"><strong>Live AR preview</strong><div class="metrics"><span class="badge" id="fpsBadge">camera off</span><span class="badge" id="latencyBadge">worker idle</span><span class="badge" id="perfBadge">worker loading</span><span class="badge" id="cameraQualityBadge">camera --</span><span class="badge"><span class="dot" id="trackDot"></span><span id="trackLabel">idle</span></span></div></div>
   <div class="cameraControls"><button id="mobileCameraBtn" title="Start or stop camera">Camera</button><button id="mobileRecalibrateBtn" title="Rebuild digital twin" disabled>Calibrate</button></div><div class="stage" id="stage"><video id="video" autoplay playsinline muted></video><canvas id="output"></canvas><div class="stageMsg" id="stageMsg">Start webcam to build your digital twin.</div></div><div class="captureBar">
     <button class="captureBtn" id="photoBtn">Take photo</button>
     <button class="captureBtn" id="recordBtn"><span class="captureDot"></span><span id="recordLabel">Record video</span></button>
@@ -1794,6 +1794,39 @@ function startFrameCapture(){
   }
 }
 
+
+async function applyBestCameraQuality(track){
+  if(!track)return {};
+  let caps={};
+  try{caps=track.getCapabilities?.()||{}}catch{}
+
+  const maxW=caps.width?.max||1920;
+  const maxH=caps.height?.max||1080;
+  const candidates=[
+    [3840,2160],[2560,1440],[1920,1080],[1600,900],[1280,720],[960,540]
+  ].filter(([w,h])=>w<=maxW&&h<=maxH);
+
+  for(const [w,h] of candidates){
+    try{
+      await track.applyConstraints({
+        width:{ideal:w},
+        height:{ideal:h},
+        frameRate:{ideal:30,max:30},
+        aspectRatio:{ideal:w/h}
+      });
+      const s=track.getSettings?.()||{};
+      if((s.width||0)>=Math.min(1280,w*.8))break;
+    }catch{}
+  }
+  return track.getSettings?.()||{};
+}
+
+function updatePreviewGeometry(){
+  if(!video.videoWidth||!video.videoHeight)return;
+  if(!isMobile)stage.style.aspectRatio=`${video.videoWidth}/${video.videoHeight}`;
+  resizeOutput();
+}
+
 async function startCamera(){
   try{
     cameraBtn.disabled=true;mobileCameraBtn.disabled=true;
@@ -1801,17 +1834,28 @@ async function startCamera(){
 
     stream=await navigator.mediaDevices.getUserMedia({
       video:{
-        facingMode:"user",
-        width:isIOS?{ideal:1920,max:3840}:(isMobile?{ideal:1280,max:1920}:{ideal:1280,max:1920}),
-        height:isIOS?{ideal:1080,max:2160}:(isMobile?{ideal:720,max:1080}:{ideal:720,max:1080}),
-        frameRate:{ideal:30,max:60}
+        facingMode:{ideal:"user"},
+        width:{ideal:isIOS?1920:1280},
+        height:{ideal:isIOS?1080:720},
+        frameRate:{ideal:30,max:30},
+        aspectRatio:{ideal:16/9}
       },
       audio:false
     });
 
+    const videoTrack=stream.getVideoTracks()[0];
+    const cameraSettings=await applyBestCameraQuality(videoTrack);
+
     video.srcObject=stream;
     await video.play();
-    status.textContent=`Camera ${video.videoWidth}×${video.videoHeight} · tracking ${TRACKING_WIDTH}×${TRACKING_HEIGHT}`;
+    updatePreviewGeometry();
+
+    const actual=videoTrack?.getSettings?.()||cameraSettings||{};
+    const aw=actual.width||video.videoWidth;
+    const ah=actual.height||video.videoHeight;
+    const afps=Math.round(actual.frameRate||30);
+    status.textContent=`Camera ${aw}×${ah} @ ${afps}fps · tracking ${TRACKING_WIDTH}×${TRACKING_HEIGHT}`;
+    const q=$("cameraQualityBadge");if(q)q.textContent=`${aw}×${ah}`;
     stageMsg.classList.add("hidden");
 
     cameraBtn.textContent="Stop camera";mobileCameraBtn.textContent="Stop";
