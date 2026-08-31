@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AR Face Painter v1.5.1</title>
+<title>AR Face Painter v1.5.2</title>
 <style>
 :root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#f4f4f5;background:#09090b;color-scheme:dark}
 *{box-sizing:border-box}body{margin:0;background:#09090b;min-height:100vh}button,input{font:inherit}
@@ -15,7 +15,8 @@ button.primary{background:#fafafa;color:#09090b;border-color:#fafafa}button:disa
 .head{height:50px;padding:0 15px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #29292f;gap:10px}.head strong{font-size:14px}
 .badge{font-size:11px;padding:4px 7px;border:1px solid #3f3f46;border-radius:999px;color:#d4d4d8;white-space:nowrap}.body{padding:14px}
 .paintWrap{position:relative;width:100%;aspect-ratio:1/1;background:#101014;border:1px solid #303038;border-radius:14px;overflow:hidden;touch-action:none}
-.paintWrap canvas{position:absolute;inset:0;width:100%;height:100%}#twin{z-index:1;pointer-events:none}#guide{z-index:2;pointer-events:none}#paint{z-index:3;cursor:crosshair}
+.paintViewport{position:absolute;inset:0;transform-origin:center center;will-change:transform}
+.paintViewport canvas{position:absolute;inset:0;width:100%;height:100%}.paintWrap canvas{position:absolute;inset:0;width:100%;height:100%}#twin{z-index:1;pointer-events:none}#guide{z-index:2;pointer-events:none}#paint{z-index:3;cursor:crosshair}.zoomBadge{font-size:11px;padding:4px 7px;border:1px solid #3f3f46;border-radius:999px;color:#d4d4d8;white-space:nowrap}
 .calibrationMessage{position:absolute;inset:0;z-index:4;display:grid;place-items:center;text-align:center;padding:30px;background:rgba(10,10,13,.78);color:#d4d4d8;font-size:13px;line-height:1.55;pointer-events:none}
 .calibrationMessage.hidden{display:none}.tools{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}.tool{background:#111114;border:1px solid #29292f;border-radius:11px;padding:10px}
 label{font-size:11px;color:#a1a1aa;display:block;margin-bottom:7px}input[type=range]{width:100%}input[type=color]{width:100%;height:36px;border:0;padding:0;background:transparent}select,input[type=text]{width:100%;min-height:36px;border:1px solid #3f3f46;background:#18181b;color:#fafafa;border-radius:8px;padding:0 10px}
@@ -74,20 +75,22 @@ label{font-size:11px;color:#a1a1aa;display:block;margin-bottom:7px}input[type=ra
 <main class="app">
 <div class="top">
   <div>
-    <h1>AR Face Painter <span class="badge">V1.5.1 mobile performance</span></h1>
-    <div class="sub" id="status">V1.5.1 adds an adaptive mobile performance mode for smoother iPhone tracking.</div>
+    <h1>AR Face Painter <span class="badge">V1.5.2 pinch zoom</span></h1>
+    <div class="sub" id="status">V1.5.2 adds pinch-to-zoom and two-finger pan in the Mask Studio.</div>
   </div>
   <div class="actions"><button id="recalibrateBtn" disabled>Rebuild digital twin</button><button class="primary" id="cameraBtn">Start camera</button></div>
 </div>
 
 <section class="grid">
 <article class="panel studioPanel active" id="studioView">
-  <div class="head"><strong>Digital-twin painter</strong><span class="badge" id="calBadge">not calibrated</span></div>
+  <div class="head"><strong>Digital-twin painter</strong><div class="metrics"><span class="zoomBadge" id="zoomBadge">100%</span><span class="badge" id="calBadge">not calibrated</span></div></div>
   <div class="body">
-    <div class="paintWrap">
-      <canvas id="twin" width="896" height="896"></canvas>
-      <canvas id="guide" width="896" height="896"></canvas>
-      <canvas id="paint" width="896" height="896" aria-label="Face painting canvas"></canvas>
+    <div class="paintWrap" id="paintWrap">
+      <div class="paintViewport" id="paintViewport">
+        <canvas id="twin" width="896" height="896"></canvas>
+        <canvas id="guide" width="896" height="896"></canvas>
+        <canvas id="paint" width="896" height="896" aria-label="Face painting canvas"></canvas>
+      </div>
       <div class="calibrationMessage" id="calibrationMessage">Start the camera and look directly toward it.<br><br>V1.2 will choose the best frontal frame and flatten your real face into this editor.</div>
     </div>
 
@@ -111,9 +114,9 @@ label{font-size:11px;color:#a1a1aa;display:block;margin-bottom:7px}input[type=ra
     </div>
 
     <div class="actions" style="margin-top:11px">
-      <button id="brushBtn">Brush</button><button id="eraserBtn">Eraser</button><button id="stampBtn">Stamp</button><button id="emojiBtn">Emoji</button><button id="undoBtn">Undo</button><button id="clearBtn">Clear</button><button id="demoBtn" disabled>Feature demo</button>
+      <button id="brushBtn">Brush</button><button id="eraserBtn">Eraser</button><button id="stampBtn">Stamp</button><button id="emojiBtn">Emoji</button><button id="undoBtn">Undo</button><button id="clearBtn">Clear</button><button id="resetZoomBtn">Reset zoom</button><button id="demoBtn" disabled>Feature demo</button>
     </div>
-    <div class="notice">Brush and eraser work as before. In <b>Stamp</b> or <b>Emoji</b> mode, click anywhere on the twin to place a sticker that will track on the live face.</div>
+    <div class="notice">Brush and eraser work as before. In <b>Stamp</b> or <b>Emoji</b> mode, click anywhere on the twin to place a sticker. On touch devices, use <b>pinch to zoom</b> and move two fingers to pan around the mask studio.</div>
   </div>
 </article>
 
@@ -132,12 +135,12 @@ label{font-size:11px;color:#a1a1aa;display:block;margin-bottom:7px}input[type=ra
 <script type="module">
 import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/+esm";
 const $=id=>document.getElementById(id);
-const paint=$("paint"),guide=$("guide"),twin=$("twin");
+const paint=$("paint"),guide=$("guide"),twin=$("twin"),paintWrap=$("paintWrap"),paintViewport=$("paintViewport");
 const pctx=paint.getContext("2d"),gctx=guide.getContext("2d"),tctx=twin.getContext("2d");
 const video=$("video"),output=$("output");
 let gl=null, glProgram=null, glPosBuffer=null, glUvBuffer=null, glIndexBuffer=null, glTexture=null;
 let glPosLoc=-1, glUvLoc=-1, glAlphaLoc=null, glIndexCount=0, textureDirty=true;
-const cameraBtn=$("cameraBtn"),recalibrateBtn=$("recalibrateBtn"),demoBtn=$("demoBtn"),mobileCameraBtn=$("mobileCameraBtn"),mobileRecalibrateBtn=$("mobileRecalibrateBtn"),studioTab=$("studioTab"),cameraTab=$("cameraTab"),studioView=$("studioView"),cameraView=$("cameraView");
+const cameraBtn=$("cameraBtn"),recalibrateBtn=$("recalibrateBtn"),demoBtn=$("demoBtn"),resetZoomBtn=$("resetZoomBtn"),zoomBadge=$("zoomBadge"),mobileCameraBtn=$("mobileCameraBtn"),mobileRecalibrateBtn=$("mobileRecalibrateBtn"),studioTab=$("studioTab"),cameraTab=$("cameraTab"),studioView=$("studioView"),cameraView=$("cameraView");
 const status=$("status"),trackingStatus=$("trackingStatus"),stageMsg=$("stageMsg"),calibrationMessage=$("calibrationMessage"),calBadge=$("calBadge"),fpsBadge=$("fpsBadge"),trackDot=$("trackDot"),trackLabel=$("trackLabel");
 const color=$("color"),size=$("size"),opacity=$("opacity"),maskOpacity=$("maskOpacity"),twinOpacity=$("twinOpacity"),stampType=$("stampType"),emojiSelect=$("emojiSelect"),emojiInput=$("emojiInput"),stampRotation=$("stampRotation"),showMesh=$("showMesh"),showFeatures=$("showFeatures");
 
@@ -148,6 +151,10 @@ const isMobile=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || matchMed
 const detectIntervalMs=isMobile?66:33;
 let lastDetectAt=0,lastTracked=null,prevTracked=null,lastTrackedAt=0,prevTrackedAt=0;
 let mode="brush",drawing=false,lastPoint=null,history=[];
+let studioScale=1,studioPanX=0,studioPanY=0;
+const MIN_STUDIO_SCALE=1,MAX_STUDIO_SCALE=4;
+const activePointers=new Map();
+let pinchState=null;
 
 const OVAL=[10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109];
 const LIPS=[61,146,91,181,84,17,314,405,321,375,291,308,324,318,402,317,14,87,178,88,95,78,191,80,81,82,13,312,311,310,415];
@@ -165,9 +172,63 @@ function buildTriangles(){
   return out;
 }
 function snapshot(){if(history.length>=22)history.shift();history.push(pctx.getImageData(0,0,paint.width,paint.height))}
-function point(e){const r=paint.getBoundingClientRect();return{x:(e.clientX-r.left)*paint.width/r.width,y:(e.clientY-r.top)*paint.height/r.height}}
+function clamp(v,min,max){return Math.max(min,Math.min(max,v))}
+function updateZoomBadge(){zoomBadge.textContent=`${Math.round(studioScale*100)}%`}
+function clampStudioPan(){
+  const maxX=(paintWrap.clientWidth*(studioScale-1))/2;
+  const maxY=(paintWrap.clientHeight*(studioScale-1))/2;
+  studioPanX=clamp(studioPanX,-maxX,maxX);
+  studioPanY=clamp(studioPanY,-maxY,maxY);
+}
+function applyStudioTransform(){
+  clampStudioPan();
+  paintViewport.style.transform=`translate(${studioPanX}px,${studioPanY}px) scale(${studioScale})`;
+  updateZoomBadge();
+}
+function resetStudioZoom(){
+  studioScale=1;studioPanX=0;studioPanY=0;pinchState=null;
+  applyStudioTransform();
+}
+function point(e){
+  const r=paint.getBoundingClientRect();
+  return{x:(e.clientX-r.left)*paint.width/r.width,y:(e.clientY-r.top)*paint.height/r.height}
+}
+function pointerInfo(e){return{x:e.clientX,y:e.clientY}}
+function pointerDistance(a,b){return Math.hypot(b.x-a.x,b.y-a.y)}
+function pointerCenter(a,b){return{x:(a.x+b.x)/2,y:(a.y+b.y)/2}}
+function beginPinch(){
+  const pts=[...activePointers.values()];
+  if(pts.length<2)return;
+  const [a,b]=pts;
+  pinchState={
+    startScale:studioScale,
+    startPanX:studioPanX,
+    startPanY:studioPanY,
+    startDistance:Math.max(1,pointerDistance(a,b)),
+    startCenter:pointerCenter(a,b)
+  };
+  drawing=false;
+  lastPoint=null;
+}
+function updatePinch(){
+  if(activePointers.size<2||!pinchState)return;
+  const pts=[...activePointers.values()];
+  const [a,b]=pts;
+  const dist=Math.max(1,pointerDistance(a,b));
+  const center=pointerCenter(a,b);
+  studioScale=clamp(pinchState.startScale*(dist/pinchState.startDistance),MIN_STUDIO_SCALE,MAX_STUDIO_SCALE);
+  studioPanX=pinchState.startPanX+(center.x-pinchState.startCenter.x);
+  studioPanY=pinchState.startPanY+(center.y-pinchState.startCenter.y);
+  applyStudioTransform();
+}
 paint.addEventListener("pointerdown",e=>{
   if(!reference)return;
+  activePointers.set(e.pointerId,pointerInfo(e));
+  if(activePointers.size>=2){
+    e.preventDefault();
+    beginPinch();
+    return;
+  }
   e.preventDefault();
   const pt=point(e);
   if(mode==="stamp"){
@@ -185,9 +246,25 @@ paint.addEventListener("pointerdown",e=>{
   lastPoint=pt;
   paint.setPointerCapture?.(e.pointerId);
 });
-paint.addEventListener("pointermove",e=>{if(!drawing)return;e.preventDefault();const q=point(e);pctx.save();pctx.lineCap="round";pctx.lineJoin="round";pctx.lineWidth=+size.value;pctx.globalAlpha=+opacity.value/100;pctx.globalCompositeOperation=mode==="eraser"?"destination-out":"source-over";pctx.strokeStyle=color.value;pctx.beginPath();pctx.moveTo(lastPoint.x,lastPoint.y);pctx.lineTo(q.x,q.y);pctx.stroke();pctx.restore();textureDirty=true;lastPoint=q});
-function endDraw(e){drawing=false;lastPoint=null;try{paint.releasePointerCapture?.(e.pointerId)}catch{}}
-paint.addEventListener("pointerup",endDraw);paint.addEventListener("pointercancel",endDraw);
+paint.addEventListener("pointermove",e=>{
+  if(activePointers.has(e.pointerId))activePointers.set(e.pointerId,pointerInfo(e));
+  if(activePointers.size>=2){
+    e.preventDefault();
+    updatePinch();
+    return;
+  }
+  if(!drawing)return;
+  e.preventDefault();
+  const q=point(e);
+  pctx.save();pctx.lineCap="round";pctx.lineJoin="round";pctx.lineWidth=+size.value;pctx.globalAlpha=+opacity.value/100;pctx.globalCompositeOperation=mode==="eraser"?"destination-out":"source-over";pctx.strokeStyle=color.value;pctx.beginPath();pctx.moveTo(lastPoint.x,lastPoint.y);pctx.lineTo(q.x,q.y);pctx.stroke();pctx.restore();textureDirty=true;lastPoint=q
+});
+function endDraw(e){
+  activePointers.delete(e.pointerId);
+  if(activePointers.size<2)pinchState=null;
+  drawing=false;lastPoint=null;
+  try{paint.releasePointerCapture?.(e.pointerId)}catch{}
+}
+paint.addEventListener("pointerup",endDraw);paint.addEventListener("pointercancel",endDraw);paint.addEventListener("pointerleave",endDraw);
 
 size.oninput=()=>$("sizeOut").textContent=size.value;opacity.oninput=()=>$("opacityOut").textContent=opacity.value;maskOpacity.oninput=()=>$("maskOpacityOut").textContent=maskOpacity.value;
 twinOpacity.oninput=()=>{twin.style.opacity=(+twinOpacity.value/100).toString();$("twinOpacityOut").textContent=twinOpacity.value};
@@ -199,9 +276,10 @@ $("stampBtn").onclick=()=>{mode="stamp";status.textContent="Stamp mode selected.
 $("emojiBtn").onclick=()=>{mode="emoji";status.textContent="Emoji mode selected. Click the twin to place an emoji."};
 $("undoBtn").onclick=()=>{const x=history.pop();if(x){pctx.putImageData(x,0,0);textureDirty=true}};
 $("clearBtn").onclick=()=>{snapshot();pctx.clearRect(0,0,paint.width,paint.height);textureDirty=true};
+resetZoomBtn.onclick=resetStudioZoom;
 demoBtn.onclick=drawDemo;
 
-twin.style.opacity=".75";$("perfBadge").textContent=isMobile?"mobile perf":"desktop mode";
+twin.style.opacity=".75";$("perfBadge").textContent=isMobile?"mobile perf":"desktop mode";updateZoomBadge();applyStudioTransform();
 
 function setMobileView(view){
   const cameraActive=view==="camera";
@@ -421,7 +499,7 @@ function copyFrame(){
   const c=document.createElement("canvas");c.width=video.videoWidth;c.height=video.videoHeight;const x=c.getContext("2d");x.drawImage(video,0,0,c.width,c.height);return c;
 }
 function beginCalibration(){
-  calibrating=true;calCount=0;bestScore=Infinity;bestLandmarks=null;bestFrame=null;reference=null;sourcePoints=null;smoothed=null;lastTracked=null;prevTracked=null;
+  calibrating=true;calCount=0;bestScore=Infinity;bestLandmarks=null;bestFrame=null;reference=null;sourcePoints=null;smoothed=null;lastTracked=null;prevTracked=null;resetStudioZoom();
   tctx.clearRect(0,0,twin.width,twin.height);gctx.clearRect(0,0,guide.width,guide.height);
   calBadge.textContent="finding frontal frame…";calibrationMessage.classList.remove("hidden");demoBtn.disabled=true;
   status.textContent="Look straight into the camera. Hold still briefly while I pick the best frontal frame.";
