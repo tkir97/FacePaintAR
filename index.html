@@ -325,6 +325,7 @@ let frameSentAt=0;
 let trackingCanvas=null,trackingCtx=null;
 const TRACKING_WIDTH=isIOS?320:480;
 const TRACKING_HEIGHT=isIOS?240:360;
+let trackingCrop={sx:0,sy:0,sw:1,sh:1,vw:1,vh:1};
 let benchmarkMode=isIOS;
 let benchmarkSamples={GPU:[],CPU:[]};
 let benchmarkDelegate=isIOS?"GPU":null;
@@ -1321,6 +1322,21 @@ function composePoseAndExpression(filtered){
 
   return out;
 }
+
+function trackingLandmarkToVideoNormalized(p){
+  const c=trackingCrop;
+  if(!c||!c.vw||!c.vh)return{x:p.x,y:p.y,z:p.z||0};
+  return{
+    x:(c.sx+p.x*c.sw)/c.vw,
+    y:(c.sy+p.y*c.sh)/c.vh,
+    z:p.z||0
+  };
+}
+
+function remapTrackingLandmarksToVideo(lms){
+  return lms.slice(0,468).map(trackingLandmarkToVideoNormalized);
+}
+
 function cloneLandmarks(lms){
   return lms.slice(0,468).map(p=>({x:p.x,y:p.y,z:p.z||0}));
 }
@@ -1641,11 +1657,12 @@ async function initTrackingWorker(delegateOverride=null){
         if(data.landmarks){
           const flat=new Float32Array(data.landmarks);
           if(flat.length>=468*3){
-            const face=new Array(468);
+            const trackedFace=new Array(468);
             for(let i=0;i<468;i++){
               const j=i*3;
-              face[i]={x:flat[j],y:flat[j+1],z:flat[j+2]};
+              trackedFace[i]={x:flat[j],y:flat[j+1],z:flat[j+2]};
             }
+            const face=remapTrackingLandmarksToVideo(trackedFace);
 
             const sampleNow=performance.now();
             if(lastWorkerResultAt){
@@ -1746,6 +1763,7 @@ function drawTrackingFrame(){
   let sx=0,sy=0,sw=vw,sh=vh;
   if(sa>ta){sw=vh*ta;sx=(vw-sw)/2}
   else if(sa<ta){sh=vw/ta;sy=(vh-sh)/2}
+  trackingCrop={sx,sy,sw,sh,vw,vh};
   ctx.drawImage(video,sx,sy,sw,sh,0,0,TRACKING_WIDTH,TRACKING_HEIGHT);
   return c;
 }
@@ -1854,7 +1872,7 @@ async function startCamera(){
     const aw=actual.width||video.videoWidth;
     const ah=actual.height||video.videoHeight;
     const afps=Math.round(actual.frameRate||30);
-    status.textContent=`Camera ${aw}×${ah} @ ${afps}fps · tracking ${TRACKING_WIDTH}×${TRACKING_HEIGHT}`;
+    status.textContent=`Camera ${aw}×${ah} @ ${afps}fps · tracking ${TRACKING_WIDTH}×${TRACKING_HEIGHT} · calibrated crop remap`;
     const q=$("cameraQualityBadge");if(q)q.textContent=`${aw}×${ah}`;
     stageMsg.classList.add("hidden");
 
