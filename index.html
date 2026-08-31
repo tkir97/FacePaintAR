@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AR Face Painter v1.5</title>
+<title>AR Face Painter v1.5.1</title>
 <style>
 :root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#f4f4f5;background:#09090b;color-scheme:dark}
 *{box-sizing:border-box}body{margin:0;background:#09090b;min-height:100vh}button,input{font:inherit}
@@ -74,8 +74,8 @@ label{font-size:11px;color:#a1a1aa;display:block;margin-bottom:7px}input[type=ra
 <main class="app">
 <div class="top">
   <div>
-    <h1>AR Face Painter <span class="badge">V1.5 mobile studio</span></h1>
-    <div class="sub" id="status">Mobile V1.5 separates creation into two focused full-screen views: Mask Studio and Camera AR.</div>
+    <h1>AR Face Painter <span class="badge">V1.5.1 mobile performance</span></h1>
+    <div class="sub" id="status">V1.5.1 adds an adaptive mobile performance mode for smoother iPhone tracking.</div>
   </div>
   <div class="actions"><button id="recalibrateBtn" disabled>Rebuild digital twin</button><button class="primary" id="cameraBtn">Start camera</button></div>
 </div>
@@ -118,7 +118,7 @@ label{font-size:11px;color:#a1a1aa;display:block;margin-bottom:7px}input[type=ra
 </article>
 
 <article class="panel cameraPanel" id="cameraView">
-  <div class="head"><strong>Live AR preview</strong><div class="metrics"><span class="badge" id="fpsBadge">camera off</span><span class="badge" id="latencyBadge">GPU mesh</span><span class="badge"><span class="dot" id="trackDot"></span><span id="trackLabel">idle</span></span></div></div>
+  <div class="head"><strong>Live AR preview</strong><div class="metrics"><span class="badge" id="fpsBadge">camera off</span><span class="badge" id="latencyBadge">GPU mesh</span><span class="badge" id="perfBadge">desktop mode</span><span class="badge"><span class="dot" id="trackDot"></span><span id="trackLabel">idle</span></span></div></div>
   <div class="cameraControls"><button id="mobileCameraBtn" title="Start or stop camera">Camera</button><button id="mobileRecalibrateBtn" title="Rebuild digital twin" disabled>Calibrate</button></div><div class="stage" id="stage"><video id="video" autoplay playsinline muted></video><canvas id="output"></canvas><div class="stageMsg" id="stageMsg">Start webcam to build your digital twin.</div></div>
   <div class="body"><div class="status" id="trackingStatus">V1.4 supports brush painting plus stamps and emoji stickers, all projected through the same low-latency GPU face mesh.</div></div>
 </article>
@@ -144,6 +144,9 @@ const color=$("color"),size=$("size"),opacity=$("opacity"),maskOpacity=$("maskOp
 let faceLandmarker=null,stream=null,raf=0,lastVideoTime=-1,lastFrameAt=performance.now();
 let triangles=[],reference=null,sourcePoints=null,smoothed=null;
 let calibrating=false,calCount=0,bestScore=Infinity,bestLandmarks=null,bestFrame=null;
+const isMobile=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || matchMedia("(max-width:900px)").matches;
+const detectIntervalMs=isMobile?66:33;
+let lastDetectAt=0,lastTracked=null,prevTracked=null,lastTrackedAt=0,prevTrackedAt=0;
 let mode="brush",drawing=false,lastPoint=null,history=[];
 
 const OVAL=[10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109];
@@ -198,7 +201,7 @@ $("undoBtn").onclick=()=>{const x=history.pop();if(x){pctx.putImageData(x,0,0);t
 $("clearBtn").onclick=()=>{snapshot();pctx.clearRect(0,0,paint.width,paint.height);textureDirty=true};
 demoBtn.onclick=drawDemo;
 
-twin.style.opacity=".75";
+twin.style.opacity=".75";$("perfBadge").textContent=isMobile?"mobile perf":"desktop mode";
 
 function setMobileView(view){
   const cameraActive=view==="camera";
@@ -302,7 +305,7 @@ function placeEmoji(pt){
 }
 
 function resizeOutput(){
-  const r=$("stage").getBoundingClientRect(),dpr=Math.min(devicePixelRatio||1,1.35);
+  const r=$("stage").getBoundingClientRect(),dpr=isMobile?1:Math.min(devicePixelRatio||1,1.35);
   output.width=Math.round(r.width*dpr);output.height=Math.round(r.height*dpr);
   if(gl) gl.viewport(0,0,output.width,output.height);
 }
@@ -315,7 +318,7 @@ function compileShader(type,source){
 }
 function initGL(){
   if(gl)return;
-  gl=output.getContext("webgl",{alpha:true,antialias:true,premultipliedAlpha:true,preserveDrawingBuffer:false});
+  gl=output.getContext("webgl",{alpha:true,antialias:!isMobile,premultipliedAlpha:true,preserveDrawingBuffer:false,powerPreference:"high-performance"});
   if(!gl)throw new Error("WebGL is required for V1.3 low-latency rendering.");
   const vs=compileShader(gl.VERTEX_SHADER,`
     attribute vec2 a_position;
@@ -418,7 +421,7 @@ function copyFrame(){
   const c=document.createElement("canvas");c.width=video.videoWidth;c.height=video.videoHeight;const x=c.getContext("2d");x.drawImage(video,0,0,c.width,c.height);return c;
 }
 function beginCalibration(){
-  calibrating=true;calCount=0;bestScore=Infinity;bestLandmarks=null;bestFrame=null;reference=null;sourcePoints=null;smoothed=null;
+  calibrating=true;calCount=0;bestScore=Infinity;bestLandmarks=null;bestFrame=null;reference=null;sourcePoints=null;smoothed=null;lastTracked=null;prevTracked=null;
   tctx.clearRect(0,0,twin.width,twin.height);gctx.clearRect(0,0,guide.width,guide.height);
   calBadge.textContent="finding frontal frame…";calibrationMessage.classList.remove("hidden");demoBtn.disabled=true;
   status.textContent="Look straight into the camera. Hold still briefly while I pick the best frontal frame.";
@@ -487,6 +490,28 @@ function drawDemo(){
   ring(LEFT_EYE,"#7c3aed",34);ring(RIGHT_EYE,"#7c3aed",34);ring(LIPS.slice(0,12),"#ff2d7a",22);
   pctx.fillStyle="#22d3ee";for(const id of [...LEFT_BROW,...RIGHT_BROW]){const p=sourcePoints[id];pctx.beginPath();pctx.arc(p.x,p.y,10,0,Math.PI*2);pctx.fill()}pctx.restore();textureDirty=true;
 }
+
+function cloneLandmarks(lms){
+  return lms.slice(0,468).map(p=>({x:p.x,y:p.y,z:p.z||0}));
+}
+function predictedLandmarks(now){
+  if(!lastTracked)return null;
+  if(!prevTracked || lastTrackedAt<=prevTrackedAt)return lastTracked;
+  const baseDt=Math.max(1,lastTrackedAt-prevTrackedAt);
+  const ahead=Math.min(isMobile?28:18,Math.max(0,now-lastTrackedAt));
+  const factor=ahead/baseDt;
+  const out=new Array(468);
+  for(let i=0;i<468;i++){
+    const a=prevTracked[i],b=lastTracked[i];
+    out[i]={
+      x:b.x+(b.x-a.x)*factor*.72,
+      y:b.y+(b.y-a.y)*factor*.72,
+      z:b.z+(b.z-a.z)*factor*.72
+    };
+  }
+  return out;
+}
+
 function videoPointToOutput(p){
   const vw=video.videoWidth||1,vh=video.videoHeight||1,ow=output.width,oh=output.height;
   const scale=Math.max(ow/vw,oh/vh);
@@ -531,7 +556,7 @@ async function initTracker(){
   triangles=buildTriangles();if(triangles.length<300)throw new Error("Could not build face topology.");rebuildGLTopology();
 }
 async function startCamera(){
-  try{cameraBtn.disabled=true;mobileCameraBtn.disabled=true;await initTracker();stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",width:{ideal:640,max:960},height:{ideal:480,max:720},frameRate:{ideal:30,max:30}},audio:false});video.srcObject=stream;await video.play();stageMsg.classList.add("hidden");cameraBtn.textContent="Stop camera";mobileCameraBtn.textContent="Stop";cameraBtn.disabled=false;mobileCameraBtn.disabled=false;cameraBtn.onclick=stopCamera;mobileCameraBtn.onclick=stopCamera;recalibrateBtn.disabled=false;mobileRecalibrateBtn.disabled=false;beginCalibration();if(innerWidth<=900)setMobileView("camera");lastVideoTime=-1;loop()}
+  try{cameraBtn.disabled=true;mobileCameraBtn.disabled=true;await initTracker();stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",width:isMobile?{ideal:480,max:640}:{ideal:640,max:960},height:isMobile?{ideal:360,max:480}:{ideal:480,max:720},frameRate:{ideal:30,max:30}},audio:false});video.srcObject=stream;await video.play();stageMsg.classList.add("hidden");cameraBtn.textContent="Stop camera";mobileCameraBtn.textContent="Stop";cameraBtn.disabled=false;mobileCameraBtn.disabled=false;cameraBtn.onclick=stopCamera;mobileCameraBtn.onclick=stopCamera;recalibrateBtn.disabled=false;mobileRecalibrateBtn.disabled=false;beginCalibration();if(innerWidth<=900)setMobileView("camera");lastVideoTime=-1;loop()}
   catch(err){console.error(err);cameraBtn.disabled=false;mobileCameraBtn.disabled=false;status.textContent="Could not start camera.";trackingStatus.textContent=err?.message||String(err)}
 }
 function stopCamera(){
@@ -541,15 +566,57 @@ function stopCamera(){
   cameraBtn.textContent="Start camera";mobileCameraBtn.textContent="Camera";
   cameraBtn.onclick=startCamera;mobileCameraBtn.onclick=startCamera;
   recalibrateBtn.disabled=true;mobileRecalibrateBtn.disabled=true;
-  fpsBadge.textContent="camera off";trackDot.classList.remove("live");trackLabel.textContent="idle";
+  fpsBadge.textContent="camera off";trackDot.classList.remove("live");trackLabel.textContent="idle";lastTracked=null;prevTracked=null;
 }
 cameraBtn.onclick=startCamera;mobileCameraBtn.onclick=startCamera;recalibrateBtn.onclick=beginCalibration;mobileRecalibrateBtn.onclick=beginCalibration;
 function loop(){
-  raf=requestAnimationFrame(loop);if(!faceLandmarker||video.readyState<2||video.currentTime===lastVideoTime)return;lastVideoTime=video.currentTime;
-  const now=performance.now(),inferStart=performance.now(),result=faceLandmarker.detectForVideo(video,now),inferMs=performance.now()-inferStart,faces=result.faceLandmarks||[];$("latencyBadge").textContent=`${Math.round(inferMs)} ms detect`;
-  if(faces.length){const lms=smooth(faces[0]);if(calibrating)calibrationStep(faces[0]);drawWarp(lms);trackDot.classList.add("live");if(!calibrating)trackLabel.textContent="face locked";trackingStatus.textContent=calibrating?"Finding the most frontal, least-skewed calibration frame…":"Digital-twin mesh active. Paint is warped across the corresponding live face triangles."}
-  else{clearGL();trackDot.classList.remove("live");trackLabel.textContent="searching";trackingStatus.textContent="Looking for a face…";smoothed=null}
-  const dt=now-lastFrameAt;lastFrameAt=now;if(dt>0)fpsBadge.textContent=Math.min(99,Math.round(1000/dt))+" fps";
+  raf=requestAnimationFrame(loop);
+  if(!faceLandmarker||video.readyState<2)return;
+
+  const now=performance.now();
+
+  // Detect less often on mobile to keep the UI/render thread responsive.
+  const shouldDetect=video.currentTime!==lastVideoTime && (now-lastDetectAt)>=detectIntervalMs;
+  if(shouldDetect){
+    lastVideoTime=video.currentTime;
+    lastDetectAt=now;
+
+    const inferStart=performance.now();
+    const result=faceLandmarker.detectForVideo(video,now);
+    const inferMs=performance.now()-inferStart;
+    const faces=result.faceLandmarks||[];
+    $("latencyBadge").textContent=`${Math.round(inferMs)} ms detect`;
+
+    if(faces.length){
+      const tracked=smooth(faces[0]);
+      prevTracked=lastTracked;
+      prevTrackedAt=lastTrackedAt;
+      lastTracked=cloneLandmarks(tracked);
+      lastTrackedAt=performance.now();
+
+      if(calibrating)calibrationStep(faces[0]);
+      trackDot.classList.add("live");
+      if(!calibrating)trackLabel.textContent="face locked";
+      trackingStatus.textContent=calibrating
+        ?"Finding the most frontal, least-skewed calibration frame…"
+        :(isMobile?"Mobile performance mode: lower-rate detection + smooth GPU prediction.":"Digital-twin mesh active.");
+    }else{
+      lastTracked=null;prevTracked=null;
+      clearGL();
+      trackDot.classList.remove("live");
+      trackLabel.textContent="searching";
+      trackingStatus.textContent="Looking for a face…";
+      smoothed=null;
+    }
+  }
+
+  // Render every animation frame using the newest landmarks plus a tiny motion prediction.
+  const renderLms=predictedLandmarks(performance.now());
+  if(renderLms && sourcePoints)drawWarp(renderLms);
+
+  const dt=now-lastFrameAt;
+  lastFrameAt=now;
+  if(dt>0)fpsBadge.textContent=Math.min(99,Math.round(1000/dt))+" fps";
 }
 </script>
 </body>

@@ -1,38 +1,26 @@
-# AR Face Painter V1.5 — Mobile Studio
+# AR Face Painter V1.5.1 — Mobile Performance
 
-V1.5 adds a mobile-first two-view workflow.
+This version specifically targets iPhone / mobile lag.
 
-## Mobile views
+## Mobile optimizations
 
-### Mask Studio
-A full-screen creation view for:
-- brush painting
-- erasing
-- stamps
-- emojis
-- mask controls
-- digital twin calibration guide
+- Detection throttled to about 15fps on mobile instead of attempting every camera frame.
+- AR rendering still runs on the browser animation loop.
+- Short-term landmark prediction fills the gaps between MediaPipe detections.
+- Mobile camera request reduced to roughly 480×360 where supported.
+- WebGL antialiasing disabled on mobile.
+- Output device-pixel-ratio capped at 1 on mobile.
+- WebGL requests high-performance GPU preference.
+- Desktop keeps the faster 30fps detection path.
 
-### Camera AR
-A separate full-screen live camera view with:
-- webcam preview
-- live AR mask
-- camera start/stop
-- recalibration
-- tracking/performance status
+## Why this helps
 
-A fixed bottom navigation switches between **Mask Studio** and **Camera AR**.
+On mobile, MediaPipe `detectForVideo()` can occupy a large part of the main thread. Trying to run inference on every video frame can actually make the overlay feel later because frames queue behind expensive detection work.
 
-## Mobile flow
-
-1. Open the app on your phone.
-2. Tap **Camera AR**.
-3. Start the camera and complete calibration.
-4. The app returns to **Mask Studio**.
-5. Create the mask.
-6. Tap **Camera AR** to see it live.
-
-Desktop keeps the existing two-column layout.
+This version prioritizes responsiveness:
+- detect less often
+- render more often
+- predict very short-term motion between detections
 
 ## Run
 
@@ -40,4 +28,4 @@ Desktop keeps the existing two-column layout.
 python3 -m http.server 8080
 ```
 
-For testing on a real phone, camera permissions usually require HTTPS when not using localhost. A local HTTPS dev server or deployed HTTPS URL is recommended.
+For a real iPhone, use an HTTPS deployment or HTTPS dev server for camera access.
